@@ -89,30 +89,36 @@ func TestSecurityProfile(t *testing.T) {
 
 		validateActivityDumpOutputs(t, test, expectedFormats, dump.OutputFiles, nil,
 			func(sp *profile.SecurityProfile) bool {
-				if sp.Version != "local_profile" {
-					t.Errorf("Profile version %s != local_profile\n", sp.Version)
-				}
 				if sp.Metadata.Name != dump.Name {
 					t.Errorf("Profile name %s != %s\n", sp.Metadata.Name, dump.Name)
 				}
 				if sp.Metadata.ContainerID != dump.ContainerID {
 					t.Errorf("Profile containerID %s != %s\n", sp.Metadata.ContainerID, dump.ContainerID)
 				}
-				if !slices.Contains(sp.Tags, "container_id:"+dump.ContainerID) {
-					t.Errorf("Profile did not contains container_id tag: %v\n", sp.Tags)
+
+				var ctx *profile.ProfileContext
+				for _, ctx = range sp.profileContexts {
+					break
 				}
-				if !slices.Contains(sp.Tags, "image_tag:latest") {
-					t.Errorf("Profile did not contains image_tag:latest %v\n", sp.Tags)
-				}
-				found := false
-				for _, tag := range sp.Tags {
-					if strings.HasPrefix(tag, "image_name:fake_ubuntu_") {
-						found = true
-						break
+				if ctx == nil {
+					t.Errorf("No profile context found!")
+				} else {
+					if !slices.Contains(ctx.Tags, "container_id:"+dump.ContainerID) {
+						t.Errorf("Profile did not contains container_id tag: %v\n", ctx.Tags)
 					}
-				}
-				if found == false {
-					t.Errorf("Profile did not contains image_name tag: %v\n", sp.Tags)
+					if !slices.Contains(ctx.Tags, "image_tag:latest") {
+						t.Errorf("Profile did not contains image_tag:latest %v\n", ctx.Tags)
+					}
+					found := false
+					for _, tag := range ctx.Tags {
+						if strings.HasPrefix(tag, "image_name:fake_ubuntu_") {
+							found = true
+							break
+						}
+					}
+					if found == false {
+						t.Errorf("Profile did not contains image_name tag: %v\n", ctx.Tags)
+					}
 				}
 				return true
 			})

@@ -18,6 +18,7 @@ import (
 	sprocess "github.com/DataDog/datadog-agent/pkg/security/resolvers/process"
 	"github.com/DataDog/datadog-agent/pkg/security/secl/model"
 	"github.com/DataDog/datadog-agent/pkg/security/utils"
+	"golang.org/x/exp/slices"
 )
 
 // ProcessNodeParent is an interface used to identify the parent of a process node
@@ -26,6 +27,7 @@ type ProcessNodeParent interface {
 	GetChildren() *[]*ProcessNode
 	GetSiblings() *[]*ProcessNode
 	AppendChild(node *ProcessNode)
+	AppendImageTag(imageTag string)
 }
 
 // ProcessNode holds the activity of a process
@@ -33,6 +35,7 @@ type ProcessNode struct {
 	Process        model.Process
 	Parent         ProcessNodeParent
 	GenerationType NodeGenerationType
+	ImageTags      []string
 	MatchedRules   []*model.MatchedRule
 
 	Files    map[string]*FileNode
@@ -81,6 +84,13 @@ func (pn *ProcessNode) GetParent() ProcessNodeParent {
 func (pn *ProcessNode) AppendChild(node *ProcessNode) {
 	pn.Children = append(pn.Children, node)
 	node.Parent = pn
+}
+
+// AppendImageTag appends the given image tag to the list
+func (pn *ProcessNode) AppendImageTag(imageTag string) {
+	if !slices.Contains(pn.ImageTags, imageTag) {
+		pn.ImageTags = append(pn.ImageTags, imageTag)
+	}
 }
 
 func (pn *ProcessNode) getNodeLabel(args string) string {
@@ -203,7 +213,7 @@ newSyscallLoop:
 
 // InsertFileEvent inserts the provided file event in the current node. This function returns true if a new entry was
 // added, false if the event was dropped.
-func (pn *ProcessNode) InsertFileEvent(fileEvent *model.FileEvent, event *model.Event, generationType NodeGenerationType, stats *Stats, dryRun bool, reducer *PathsReducer, resolvers *resolvers.EBPFResolvers) bool {
+func (pn *ProcessNode) InsertFileEvent(fileEvent *model.FileEvent, event *model.Event, imageTag string, generationType NodeGenerationType, stats *Stats, dryRun bool, reducer *PathsReducer, resolvers *resolvers.EBPFResolvers) bool {
 	var filePath string
 	if generationType != Snapshot {
 		filePath = event.FieldHandlers.ResolveFilePath(event, fileEvent)
@@ -222,22 +232,22 @@ func (pn *ProcessNode) InsertFileEvent(fileEvent *model.FileEvent, event *model.
 
 	child, ok := pn.Files[parent]
 	if ok {
-		return child.InsertFileEvent(fileEvent, event, filePath[nextParentIndex:], generationType, stats, dryRun, filePath, resolvers)
+		return child.InsertFileEvent(fileEvent, event, filePath[nextParentIndex:], imageTag, generationType, stats, dryRun, filePath, resolvers)
 	}
 
 	if !dryRun {
 		// create new child
 		if len(filePath) <= nextParentIndex+1 {
 			// this is the last child, add the fileEvent context at the leaf of the files tree.
-			node := NewFileNode(fileEvent, event, parent, generationType, filePath, resolvers)
+			node := NewFileNode(fileEvent, event, parent, imageTag, generationType, filePath, resolvers)
 			node.MatchedRules = model.AppendMatchedRule(node.MatchedRules, event.Rules)
 			stats.FileNodes++
 			pn.Files[parent] = node
 		} else {
 			// This is an intermediary node in the branch that leads to the leaf we want to add. Create a node without the
 			// fileEvent context.
-			newChild := NewFileNode(nil, nil, parent, generationType, filePath, resolvers)
-			newChild.InsertFileEvent(fileEvent, event, filePath[nextParentIndex:], generationType, stats, dryRun, filePath, resolvers)
+			newChild := NewFileNode(nil, nil, parent, imageTag, generationType, filePath, resolvers)
+			newChild.InsertFileEvent(fileEvent, event, filePath[nextParentIndex:], imageTag, generationType, stats, dryRun, filePath, resolvers)
 			stats.FileNodes++
 			pn.Files[parent] = newChild
 		}
@@ -265,7 +275,7 @@ func (pn *ProcessNode) findDNSNode(DNSName string, DNSMatchMaxDepth int, DNSType
 }
 
 // InsertDNSEvent inserts a DNS event in a process node
-func (pn *ProcessNode) InsertDNSEvent(evt *model.Event, generationType NodeGenerationType, stats *Stats, DNSNames *utils.StringKeys, dryRun bool, dnsMatchMaxDepth int) bool {
+func (pn *ProcessNode) InsertDNSEvent(evt *model.Event, imageTag string, generationType NodeGenerationType, stats *Stats, DNSNames *utils.StringKeys, dryRun bool, dnsMatchMaxDepth int) bool {
 	if dryRun {
 		// Use DNSMatchMaxDepth only when searching for a node, not when trying to insert
 		return !pn.findDNSNode(evt.DNS.Name, dnsMatchMaxDepth, evt.DNS.Type)
@@ -277,10 +287,18 @@ func (pn *ProcessNode) InsertDNSEvent(evt *model.Event, generationType NodeGener
 		// update matched rules
 		dnsNode.MatchedRules = model.AppendMatchedRule(dnsNode.MatchedRules, evt.Rules)
 
+		var imageTagInserted bool
+		if !slices.Contains(dnsNode.ImageTags, imageTag) {
+			imageTagInserted = true
+			dnsNode.ImageTags = append(dnsNode.ImageTags, imageTag)
+		} else {
+			imageTagInserted = false
+		}
+
 		// look for the DNS request type
 		for _, req := range dnsNode.Requests {
 			if req.Type == evt.DNS.Type {
-				return false
+				return imageTagInserted
 			}
 		}
 
@@ -289,13 +307,13 @@ func (pn *ProcessNode) InsertDNSEvent(evt *model.Event, generationType NodeGener
 		return true
 	}
 
-	pn.DNSNames[evt.DNS.Name] = NewDNSNode(&evt.DNS, evt.Rules, generationType)
+	pn.DNSNames[evt.DNS.Name] = NewDNSNode(&evt.DNS, evt.Rules, generationType, imageTag)
 	stats.DNSNodes++
 	return true
 }
 
 // InsertBindEvent inserts a bind event in a process node
-func (pn *ProcessNode) InsertBindEvent(evt *model.Event, generationType NodeGenerationType, stats *Stats, dryRun bool) bool {
+func (pn *ProcessNode) InsertBindEvent(evt *model.Event, imageTag string, generationType NodeGenerationType, stats *Stats, dryRun bool) bool {
 	if evt.Bind.SyscallEvent.Retval != 0 {
 		return false
 	}
@@ -319,9 +337,230 @@ func (pn *ProcessNode) InsertBindEvent(evt *model.Event, generationType NodeGene
 	}
 
 	// Insert bind event
-	if sock.InsertBindEvent(&evt.Bind, generationType, evt.Rules, dryRun) {
+	if sock.InsertBindEvent(&evt.Bind, imageTag, generationType, evt.Rules, dryRun) {
 		newNode = true
 	}
 
 	return newNode
+}
+
+func (pn *ProcessNode) applyImageTagOnLineageIfNeeded(imageTag string) {
+	if imageTag != "" {
+		if !slices.Contains(pn.ImageTags, imageTag) {
+			pn.ImageTags = append(pn.ImageTags, imageTag)
+			parent := pn.GetParent()
+			for parent != nil {
+				parent.AppendImageTag(imageTag)
+				parent = parent.GetParent()
+			}
+		}
+	}
+}
+
+// TagAllNodes tags this process, its files/dns/socks and childrens with the given image tag
+func (pn *ProcessNode) TagAllNodes(imageTag string) {
+	if imageTag == "" {
+		return
+	}
+
+	if !slices.Contains(pn.ImageTags, imageTag) {
+		pn.ImageTags = append(pn.ImageTags, imageTag)
+	}
+	for _, file := range pn.Files {
+		file.tagAllNodes(imageTag)
+	}
+	for _, dns := range pn.DNSNames {
+		dns.appendImageTag(imageTag)
+	}
+	for _, sock := range pn.Sockets {
+		sock.appendImageTag(imageTag)
+	}
+	for _, child := range pn.Children {
+		child.TagAllNodes(imageTag)
+	}
+}
+
+func removeImageTagFromList(imageTags []string, imageTag string) []string {
+	for index, tag := range imageTags {
+		if tag == imageTag {
+			return append(imageTags[:index], imageTags[index+1:]...)
+		}
+	}
+	return imageTags
+}
+
+// EvictImageTag will remmove every trace of this image tag, and returns true if the process node should be removed
+// also, recompute the list of dnsnames and syscalls
+func (pn *ProcessNode) EvictImageTag(imageTag string, DNSNames *utils.StringKeys, SyscallsMask map[int]int) bool {
+	if imageTag == "" {
+		return false
+	}
+
+	if !slices.Contains(pn.ImageTags, imageTag) {
+		return false // this node don't have the tag, and all his childs/files/dns/etc shouldn't have neither
+	}
+	pn.ImageTags = removeImageTagFromList(pn.ImageTags, imageTag)
+	if len(pn.ImageTags) == 0 {
+		// if we removed the last tag, remove entirely the process node from the tree
+		return true
+	}
+
+	for filename, file := range pn.Files {
+		if shouldRemoveNode := file.evictImageTag(imageTag); shouldRemoveNode {
+			delete(pn.Files, filename)
+		}
+	}
+
+	// Evict image tag from dns nodes
+	for question, dns := range pn.DNSNames {
+		if shouldRemoveNode := dns.evictImageTag(imageTag, DNSNames); shouldRemoveNode {
+			delete(pn.DNSNames, question)
+		}
+	}
+
+	newSockets := []*SocketNode{}
+	for _, sock := range pn.Sockets {
+		if shouldRemoveNode := sock.evictImageTag(imageTag); !shouldRemoveNode {
+			newSockets = append(newSockets, sock)
+		}
+	}
+	pn.Sockets = newSockets
+
+	newChildren := []*ProcessNode{}
+	for _, child := range pn.Children {
+		if shouldRemoveNode := child.EvictImageTag(imageTag, DNSNames, SyscallsMask); !shouldRemoveNode {
+			newChildren = append(newChildren, child)
+		}
+	}
+	pn.Children = newChildren
+
+	for _, id := range pn.Syscalls {
+		SyscallsMask[id] = id
+	}
+	return false
+}
+
+func (pn *ProcessNode) merge(new *ProcessNode, pReducer *PathsReducer) {
+	// merge image tags
+	if len(new.ImageTags) > 0 {
+		pn.ImageTags = append(pn.ImageTags, new.ImageTags...)
+		pn.ImageTags = slices.Compact(pn.ImageTags)
+	}
+
+	// merge Syscalls
+	if len(new.Syscalls) > 0 {
+		pn.Syscalls = append(pn.Syscalls, new.Syscalls...)
+		pn.Syscalls = slices.Compact(pn.Syscalls)
+	}
+
+	// merge files
+	pn.mergeFiles(new, pReducer)
+
+	// merge DNSNames
+	pn.mergeDNSNames(new)
+
+	// merge Sockets
+	pn.mergeSockets(new)
+
+	// merge children
+	newProcesses := []*ProcessNode{}
+	// loop on children
+	for _, newProcess := range new.Children {
+		alreadyPresent := false
+		// search if it's already present or not
+		for _, currentProcess := range pn.Children {
+			// if yes, merge them
+			if currentProcess.Matches(&newProcess.Process, false, true) {
+				alreadyPresent = true
+				currentProcess.merge(newProcess, pReducer)
+				break
+			}
+		}
+		// if not, add it
+		if !alreadyPresent {
+			newProcesses = append(newProcesses, newProcess)
+		}
+	}
+	// append the new proccesses if any
+	if len(newProcesses) > 0 {
+		pn.Children = append(pn.Children, newProcesses...)
+	}
+}
+
+func (pn *ProcessNode) mergeDNSNames(new *ProcessNode) {
+	// loop on new DNSNodes
+	for key, newDNS := range new.DNSNames {
+		// check if the name is already present or not
+		currentDNS, found := pn.DNSNames[key]
+		if !found {
+			// if not, just add it
+			pn.DNSNames[key] = newDNS
+			continue
+		}
+		// merge them otherwise
+		currentDNS.merge(newDNS)
+	}
+}
+
+func (pn *ProcessNode) mergeSockets(new *ProcessNode) {
+	sockToAdd := []*SocketNode{}
+	// loop on new sockets
+	for _, newSock := range new.Sockets {
+		// first, search for the socket family
+		index, found := slices.BinarySearchFunc(pn.Sockets, newSock, func(current, new *SocketNode) int {
+			if current.Matches(new) {
+				return 0
+			}
+			return 42
+		})
+		if !found { // if not found, append directly the whole socket
+			sockToAdd = append(sockToAdd, newSock)
+			continue
+		}
+		// for the same family, merge the binds
+		currentSock := pn.Sockets[index]
+		bindToAdd := []*BindNode{}
+		for _, bind := range newSock.Bind {
+			i, found := slices.BinarySearchFunc(currentSock.Bind, bind, func(current, new *BindNode) int {
+				if current.Matches(new) {
+					return 0
+				}
+				return 42
+			})
+			// if not found, append directly to the binds
+			if !found {
+				bindToAdd = append(bindToAdd, bind)
+				continue
+			}
+			// merge them otherwise
+			currentSock.Bind[i].merge(bind)
+		}
+		if len(bindToAdd) > 1 {
+			currentSock.Bind = append(currentSock.Bind, bindToAdd...)
+		}
+	}
+	if len(sockToAdd) > 0 {
+		pn.Sockets = append(pn.Sockets, sockToAdd...)
+	}
+}
+
+func (pn *ProcessNode) mergeFiles(new *ProcessNode, pReducer *PathsReducer) {
+	// loop on new files
+	for filePath, newFile := range new.Files {
+		// use the path reducer
+		reducedPath := filePath
+		if pReducer != nil && !newFile.IsPattern {
+			reducedPath = pReducer.ReducePath(filePath, newFile.File, pn)
+		}
+
+		// search file in current files
+		currentFile, found := pn.Files[reducedPath]
+		if !found {
+			// if not found, just add it
+			pn.Files[reducedPath] = newFile
+			continue
+		}
+		// merge them otherwise
+		currentFile.merge(newFile, pn, pReducer)
+	}
 }

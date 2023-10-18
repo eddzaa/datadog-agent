@@ -865,12 +865,12 @@ func TestSecurityProfileManager_tryAutolearn(t *testing.T) {
 					}
 					ti.eventTimestampRaw = currentIncrement
 					event := craftFakeEvent(t0, &ti, defaultContainerID)
-					assert.Equal(t, ti.result, spm.tryAutolearn(profile, event))
+					assert.Equal(t, ti.result, spm.tryAutolearn(profile, event, "tag"))
 					currentIncrement += ti.loopIncrement
 				}
 			} else { // only run once
 				event := craftFakeEvent(t0, &ti, defaultContainerID)
-				assert.Equal(t, ti.result, spm.tryAutolearn(profile, event))
+				assert.Equal(t, ti.result, spm.tryAutolearn(profile, event, "tag"))
 			}
 
 			// TODO: also check profile stats and global metrics

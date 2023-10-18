@@ -11,6 +11,7 @@ package profile
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -36,31 +37,36 @@ type EventTypeState struct {
 	state           EventFilteringProfileState
 }
 
+// VersionContext holds the context of one version (defined by its image tag)
+type VersionContext struct {
+	firstSeenNano uint64
+	lastSeenNano  uint64
+
+	eventTypeState map[model.EventType]*EventTypeState
+
+	// Syscalls is the syscalls profile
+	Syscalls []uint32
+
+	// Tags defines the tags used to compute this profile, for each present profile versions
+	Tags []string
+}
+
 // SecurityProfile defines a security profile
 type SecurityProfile struct {
 	sync.Mutex
-	loadedInKernel     bool
-	loadedNano         uint64
-	selector           cgroupModel.WorkloadSelector
-	profileCookie      uint64
-	eventTypes         []model.EventType
-	eventTypeState     map[model.EventType]*EventTypeState
-	eventTypeStateLock sync.Mutex
+	loadedInKernel      bool
+	loadedNano          uint64
+	selector            cgroupModel.WorkloadSelector
+	profileCookie       uint64
+	eventTypes          []model.EventType
+	versionContextsLock sync.Mutex
+	versionContexts     map[string]VersionContext
 
 	// Instances is the list of workload instances to witch the profile should apply
 	Instances []*cgroupModel.CacheEntry
 
-	// Version is the version of a Security Profile
-	Version string
-
 	// Metadata contains metadata for the current profile
 	Metadata mtdt.Metadata
-
-	// Tags defines the tags used to compute this profile
-	Tags []string
-
-	// Syscalls is the syscalls profile
-	Syscalls []uint32
 
 	// ActivityTree contains the activity tree of the Security Profile
 	ActivityTree *activity_tree.ActivityTree
@@ -73,11 +79,17 @@ func NewSecurityProfile(selector cgroupModel.WorkloadSelector, eventTypes []mode
 	// profiles that allow for evaluating new event types, and profiles that don't. As such, the event types allowed to
 	// generate anomaly detections in the input of this function will need to be merged with the event types defined in
 	// the configuration.
-	return &SecurityProfile{
-		selector:       selector,
-		eventTypes:     eventTypes,
-		eventTypeState: make(map[model.EventType]*EventTypeState),
+	sp := &SecurityProfile{
+		selector:        selector,
+		eventTypes:      eventTypes,
+		versionContexts: make(map[string]VersionContext),
 	}
+	if selector.Tag != "" {
+		sp.versionContexts[selector.Tag] = VersionContext{
+			eventTypeState: make(map[model.EventType]*EventTypeState),
+		}
+	}
+	return sp
 }
 
 // reset empties all internal fields so that this profile can be used again in the future
@@ -85,7 +97,7 @@ func (p *SecurityProfile) reset() {
 	p.loadedInKernel = false
 	p.loadedNano = 0
 	p.profileCookie = 0
-	p.eventTypeState = make(map[model.EventType]*EventTypeState)
+	p.versionContexts = make(map[string]VersionContext)
 	p.Instances = nil
 }
 
@@ -98,9 +110,11 @@ func (p *SecurityProfile) generateCookies() {
 
 func (p *SecurityProfile) generateSyscallsFilters() [64]byte {
 	var output [64]byte
-	for _, syscall := range p.Syscalls {
-		if syscall/8 < 64 && (1<<(syscall%8) < 256) {
-			output[syscall/8] |= 1 << (syscall % 8)
+	for _, pCtxt := range p.versionContexts {
+		for _, syscall := range pCtxt.Syscalls {
+			if syscall/8 < 64 && (1<<(syscall%8) < 256) {
+				output[syscall/8] |= 1 << (syscall % 8)
+			}
 		}
 	}
 	return output
@@ -143,10 +157,6 @@ func LoadProfileFromFile(filepath string) (*proto.SecurityProfile, error) {
 	if err = profile.UnmarshalVT(raw); err != nil {
 		return nil, fmt.Errorf("couldn't decode protobuf profile: %w", err)
 	}
-
-	if len(utils.GetTagValue("image_tag", profile.Tags)) == 0 {
-		profile.Tags = append(profile.Tags, "image_tag:latest")
-	}
 	return profile, nil
 }
 
@@ -159,19 +169,27 @@ func (p *SecurityProfile) SendStats(client statsd.ClientInterface) error {
 
 // ToSecurityProfileMessage returns a SecurityProfileMessage filled with the content of the current Security Profile
 func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Resolver, cfg *config.RuntimeSecurityConfig) *api.SecurityProfileMessage {
+	// construct the list of image tags for this profile
+	imageTags := ""
+	for key := range p.versionContexts {
+		if imageTags != "" {
+			imageTags = imageTags + ","
+		}
+		imageTags = imageTags + key
+	}
+
 	msg := &api.SecurityProfileMessage{
 		LoadedInKernel:          p.loadedInKernel,
 		LoadedInKernelTimestamp: timeResolver.ResolveMonotonicTimestamp(p.loadedNano).String(),
 		Selector: &api.WorkloadSelectorMessage{
 			Name: p.selector.Image,
-			Tag:  p.selector.Tag,
+			Tag:  imageTags,
 		},
 		ProfileCookie: p.profileCookie,
-		Version:       p.Version,
 		Metadata: &api.MetadataMessage{
 			Name: p.Metadata.Name,
 		},
-		Tags: p.Tags,
+		ProfileGlobalState: p.GetGlobalState().toTag(),
 	}
 	if p.ActivityTree != nil {
 		msg.Stats = &api.ActivityTreeStatsMessage{
@@ -187,15 +205,6 @@ func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Re
 		msg.EventTypes = append(msg.EventTypes, evt.String())
 	}
 
-	for evt, state := range p.eventTypeState {
-		lastAnomaly := timeResolver.ResolveMonotonicTimestamp(state.lastAnomalyNano)
-		msg.LastAnomalies = append(msg.LastAnomalies, &api.LastAnomalyTimestampMessage{
-			EventType:         evt.String(),
-			Timestamp:         lastAnomaly.String(),
-			IsStableEventType: time.Since(lastAnomaly) >= cfg.GetAnomalyDetectionMinimumStablePeriod(evt),
-		})
-	}
-
 	for _, inst := range p.Instances {
 		msg.Instances = append(msg.Instances, &api.InstanceMessage{
 			ContainerID: inst.ID,
@@ -203,4 +212,85 @@ func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Re
 		})
 	}
 	return msg
+}
+
+// GetState returns the state of a profile for a given imageTag
+func (p *SecurityProfile) GetState(imageTag string) EventFilteringProfileState {
+	p.versionContextsLock.Lock()
+	defer p.versionContextsLock.Unlock()
+	pCtx, ok := p.versionContexts[imageTag]
+	if !ok {
+		return NoProfile
+	}
+	state := StableEventType
+	for _, et := range p.eventTypes {
+		if pCtx.eventTypeState[et].state == UnstableEventType {
+			return UnstableEventType
+		} else if pCtx.eventTypeState[et].state != StableEventType {
+			state = AutoLearning
+		}
+	}
+	return state
+}
+
+// GetGlobalState returns the global state of a profile: AutoLearning, StableEventType or UnstableEventType
+func (p *SecurityProfile) GetGlobalState() EventFilteringProfileState {
+	globalState := AutoLearning
+	for imageTag, _ := range p.versionContexts {
+		state := p.GetState(imageTag)
+		if state == UnstableEventType {
+			return UnstableEventType
+		} else if state == StableEventType {
+			globalState = StableEventType
+		}
+	}
+	return globalState // AutoLearning or StableEventType
+}
+
+func (p *SecurityProfile) evictProfileVersion() {
+	if len(p.versionContexts) <= 0 {
+		return // should not happen
+	}
+
+	oldest := uint64(math.MaxUint64)
+	oldestImageTag := ""
+
+	// select the oldest image tag
+	// TODO: not 100% sure to select the first or the lastSeenNano
+	for imageTag, profileCtx := range p.versionContexts {
+		if profileCtx.lastSeenNano < oldest {
+			oldest = profileCtx.lastSeenNano
+			oldestImageTag = imageTag
+		}
+	}
+	// delete image context
+	delete(p.versionContexts, oldestImageTag)
+
+	// then, remove every trace of this version from the tree
+	p.ActivityTree.EvictImageTag(oldestImageTag)
+}
+
+func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile) {
+	newImageTag := newVersion.selector.Tag
+	_, ok := p.versionContexts[newImageTag]
+	if ok { // should not happen: if new tag already exists, ignore
+		return
+	}
+	// prepare new profile context to be inserted
+	newProfileCtx, ok := newVersion.versionContexts[newImageTag]
+	if !ok { // should not happen neither
+		return
+	}
+	newProfileCtx.firstSeenNano = uint64(time.Now().UnixNano())
+	newProfileCtx.lastSeenNano = uint64(time.Now().UnixNano())
+
+	// add the new profile context to the list
+	// if we reached the max number of versions, we should evict one
+	if len(p.versionContexts) >= MaxProfileImageTags {
+		p.evictProfileVersion()
+	}
+	p.versionContexts[newImageTag] = newProfileCtx
+
+	// finally, merge the trees
+	p.ActivityTree.Merge(newVersion.ActivityTree)
 }

@@ -287,11 +287,7 @@ func NewActivityDumpManager(config *config.Config, statsdClient statsd.ClientInt
 
 	var denyList []cgroupModel.WorkloadSelector
 	for _, entry := range config.RuntimeSecurity.ActivityDumpWorkloadDenyList {
-		split := strings.Split(entry, ":")
-		if len(split) != 2 {
-			return nil, fmt.Errorf("invalid activity_dump.workload_deny_list parameter: expecting following format \"{image_name}:[{image_tag}|*]\"")
-		}
-		selectorTmp, err := cgroupModel.NewWorkloadSelector(split[0], split[1])
+		selectorTmp, err := cgroupModel.NewWorkloadSelector(entry, "*")
 		if err != nil {
 			return nil, fmt.Errorf("invalid workload selector in activity_dump.workload_deny_list: %w", err)
 		}
@@ -684,8 +680,9 @@ func (adm *ActivityDumpManager) SearchTracedProcessCacheEntryCallback(ad *Activi
 			parent = activity_tree.GetNextAncestorBinaryOrArgv0(&parent.ProcessContext)
 		}
 
+		imageTag := utils.GetTagValue("image_tag", ad.Tags)
 		for _, parent = range ancestors {
-			_, _, err := ad.ActivityTree.CreateProcessNode(parent, activity_tree.Snapshot, false, adm.resolvers)
+			_, _, err := ad.ActivityTree.CreateProcessNode(parent, imageTag, activity_tree.Snapshot, false, adm.resolvers)
 			if err != nil {
 				// if one of the parents wasn't inserted, leave now
 				break
