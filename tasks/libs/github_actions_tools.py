@@ -11,7 +11,7 @@ from invoke.exceptions import Exit
 
 from tasks.libs.common.color import color_message
 from tasks.libs.common.github_api import GithubAPI
-from tasks.libs.common.utils import DEFAULT_BRANCH
+from tasks.libs.common.utils import DEFAULT_BRANCH, DEFAULT_INTEGRATIONS_CORE_BRANCH
 
 
 def trigger_macos_workflow(
@@ -25,6 +25,7 @@ def trigger_macos_workflow(
     bucket_branch=None,
     version_cache_file_content=None,
     concurrency_key=None,
+    integrations_core_ref=DEFAULT_INTEGRATIONS_CORE_BRANCH,
 ):
     """
     Trigger a workflow to build a MacOS Agent.
@@ -54,6 +55,9 @@ def trigger_macos_workflow(
 
     if concurrency_key is not None:
         inputs["concurrency_key"] = concurrency_key
+
+    if integrations_core_ref is not None:
+        inputs["integrations_core_ref"] = version_cache_file_content
 
     # The workflow trigger endpoint doesn't return anything. You need to fetch the workflow run id
     # by yourself.

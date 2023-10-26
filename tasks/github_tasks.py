@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from invoke import Exit, task
 
-from tasks.libs.common.utils import DEFAULT_BRANCH, get_git_pretty_ref
+from tasks.libs.common.utils import DEFAULT_BRANCH, DEFAULT_INTEGRATIONS_CORE_BRANCH, get_git_pretty_ref
 from tasks.libs.datadog_api import create_count, send_metrics
 from tasks.libs.github_actions_tools import (
     download_artifacts,
@@ -63,6 +63,7 @@ def trigger_macos_build(
     version_cache=None,
     retry_download=3,
     retry_interval=10,
+    integrations_core_ref=DEFAULT_INTEGRATIONS_CORE_BRANCH,
 ):
     _trigger_macos_workflow(
         # Provide the release version to be able to fetch the associated
@@ -82,6 +83,7 @@ def trigger_macos_build(
         gitlab_pipeline_id=os.environ.get("CI_PIPELINE_ID", None),
         bucket_branch=os.environ.get("BUCKET_BRANCH", None),
         version_cache_file_content=version_cache,
+        integrations_core_ref=integrations_core_ref,
     )
 
 
