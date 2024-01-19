@@ -17,6 +17,7 @@ tests_macos:
     - inv -e github.trigger-macos --workflow-type "test" --datadog-agent-ref "$CI_COMMIT_SHA" --python-runtimes "$PYTHON_RUNTIMES" --version-cache "$VERSION_CACHE_CONTENT"
   timeout: 6h
   after_script:
+    - source /root/.bashrc
     # Install the ci-visbility standalone CLI and upload junits
     - curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci" && chmod +x /usr/local/bin/datadog-ci
     - set +x
