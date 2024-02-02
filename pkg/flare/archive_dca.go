@@ -14,6 +14,11 @@ import (
 	"net/http"
 	"path/filepath"
 
+<<<<<<< HEAD
+=======
+	"github.com/DataDog/datadog-agent/comp/collector/collector"
+	"github.com/DataDog/datadog-agent/comp/core/autodiscovery"
+>>>>>>> d8190ec560 (remove global common.AC)
 	flarehelpers "github.com/DataDog/datadog-agent/comp/core/flare/helpers"
 	flaretypes "github.com/DataDog/datadog-agent/comp/core/flare/types"
 	apiv1 "github.com/DataDog/datadog-agent/pkg/clusteragent/api/v1"
@@ -52,7 +57,9 @@ func createDCAArchive(fb flaretypes.FlareBuilder, confSearchPaths map[string]str
 	} else {
 		// The Status will be unavailable unless the agent is running.
 		// Only zip it up if the agent is running
-		err := fb.AddFileFromFunc("cluster-agent-status.log", clusteragentStatus.GetAndFormatStatus)
+		err := fb.AddFileFromFunc("cluster-agent-status.log", func() ([]byte, error) {
+			return clusteragentStatus.GetAndFormatStatus(ac)
+		})
 		if err != nil {
 			log.Errorf("Error getting the status of the DCA, %q", err)
 			return
