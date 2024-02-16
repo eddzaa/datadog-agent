@@ -13,7 +13,6 @@ env:
 jobs:
   run:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Install Go
         uses: actions/setup-go@v4
@@ -40,6 +39,7 @@ jobs:
           go get ./...
 
       - name: Previous benchmark results
+        continue-on-error: true
         run: |
           cd go/src/github.com/DataDog/datadog-agent
           go test -tags=test -run='^$' -bench=StartEndInvocation -count=10 -benchtime=500ms -timeout=60m \
@@ -56,12 +56,14 @@ jobs:
           go get ./...
 
       - name: Current benchmark results
+        continue-on-error: true
         run: |
           cd go/src/github.com/DataDog/datadog-agent
           go test -tags=test -run='^$' -bench=StartEndInvocation -count=10 -benchtime=500ms -timeout=60m \
               ./pkg/serverless/... | tee current
 
       - name: Analyze results
+        continue-on-error: true
         id: analyze
         run: |
           cd go/src/github.com/DataDog/datadog-agent
