@@ -270,7 +270,7 @@ func (p *SecurityProfile) evictProfileVersion() {
 	p.ActivityTree.EvictImageTag(oldestImageTag)
 }
 
-func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile) {
+func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageTags int) {
 	newImageTag := newVersion.selector.Tag
 	_, ok := p.versionContexts[newImageTag]
 	if ok { // should not happen: if new tag already exists, ignore
@@ -285,9 +285,11 @@ func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile) {
 	newProfileCtx.lastSeenNano = uint64(time.Now().UnixNano())
 
 	// add the new profile context to the list
-	// if we reached the max number of versions, we should evict one
-	if len(p.versionContexts) >= MaxProfileImageTags {
+	// if we reached the max number of versions, we should evict the surplus
+	surplus := len(p.versionContexts) - maxImageTags
+	for surplus > 0 {
 		p.evictProfileVersion()
+		surplus--
 	}
 	p.versionContexts[newImageTag] = newProfileCtx
 

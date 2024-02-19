@@ -40,9 +40,6 @@ import (
 // DefaultProfileName used as default profile name
 const DefaultProfileName = "default"
 
-// MaxProfileImageTags defines how many concurrent versions of a profile can be maintained
-const MaxProfileImageTags = 10
-
 // EventFilteringProfileState is used to compute metrics for the event filtering feature
 type EventFilteringProfileState uint8
 
@@ -1021,5 +1018,5 @@ func (m *SecurityProfileManager) AddNewTagVersion(baseVersion *SecurityProfile, 
 	newProfileVersion.ActivityTree = activity_tree.NewActivityTree(newProfileVersion, m.pathsReducer, "security_profile")
 	activity_tree.ProtoDecodeActivityTree(newProfileVersion.ActivityTree, newVersion.Tree)
 	// merge the trees
-	baseVersion.mergeNewVersion(newProfileVersion)
+	baseVersion.mergeNewVersion(newProfileVersion, m.config.RuntimeSecurity.SecurityProfileMaxImageTags)
 }
