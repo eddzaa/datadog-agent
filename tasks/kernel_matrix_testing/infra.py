@@ -1,6 +1,5 @@
 import json
 import os
-from pathlib import Path
 
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.stacks import ask_for_ssh, find_ssh_key
@@ -106,7 +105,7 @@ class HostInstance:
         return f"<HostInstance> {self.ip} {self.arch}"
 
 
-def build_infrastructure(stack: str | Path, remote_ssh_key=None):
+def build_infrastructure(stack: str, remote_ssh_key=None):
     stack_outputs = os.path.join(get_kmt_os().stacks_dir, stack, "stack.output")
     with open(stack_outputs, 'r') as f:
         infra_map = json.load(f)
