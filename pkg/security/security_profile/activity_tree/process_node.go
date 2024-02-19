@@ -381,10 +381,8 @@ func (pn *ProcessNode) TagAllNodes(imageTag string) {
 }
 
 func removeImageTagFromList(imageTags []string, imageTag string) []string {
-	for index, tag := range imageTags {
-		if tag == imageTag {
-			return append(imageTags[:index], imageTags[index+1:]...)
-		}
+	if index := slices.Index(imageTags, imageTag); index != -1 {
+		return slices.Delete(imageTags, index, index+1)
 	}
 	return imageTags
 }
@@ -509,13 +507,13 @@ func (pn *ProcessNode) mergeSockets(new *ProcessNode) {
 	// loop on new sockets
 	for _, newSock := range new.Sockets {
 		// first, search for the socket family
-		index, found := slices.BinarySearchFunc(pn.Sockets, newSock, func(current, new *SocketNode) int {
-			if current.Matches(new) {
-				return 0
+		index := slices.IndexFunc(pn.Sockets, func(current *SocketNode) bool {
+			if current.Matches(newSock) {
+				return true
 			}
-			return 42
+			return false
 		})
-		if !found { // if not found, append directly the whole socket
+		if index == -1 { // if not found, append directly the whole socket
 			sockToAdd = append(sockToAdd, newSock)
 			continue
 		}
@@ -523,14 +521,14 @@ func (pn *ProcessNode) mergeSockets(new *ProcessNode) {
 		currentSock := pn.Sockets[index]
 		bindToAdd := []*BindNode{}
 		for _, bind := range newSock.Bind {
-			i, found := slices.BinarySearchFunc(currentSock.Bind, bind, func(current, new *BindNode) int {
-				if current.Matches(new) {
-					return 0
+			i := slices.IndexFunc(currentSock.Bind, func(current *BindNode) bool {
+				if current.Matches(bind) {
+					return true
 				}
-				return 42
+				return false
 			})
 			// if not found, append directly to the binds
-			if !found {
+			if index == -1 {
 				bindToAdd = append(bindToAdd, bind)
 				continue
 			}
