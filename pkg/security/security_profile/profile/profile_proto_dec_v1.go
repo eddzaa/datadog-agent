@@ -25,7 +25,7 @@ func ProtoToSecurityProfile(output *SecurityProfile, pathsReducer *activity_tree
 	output.Metadata = mtdt.ProtoMetadataToMetadata(input.Metadata)
 
 	for key, ctx := range input.ProfileContexts {
-		outCtx := VersionContext{
+		outCtx := &VersionContext{
 			firstSeenNano:  ctx.FirstSeen,
 			lastSeenNano:   ctx.LastSeen,
 			eventTypeState: make(map[model.EventType]*EventTypeState),

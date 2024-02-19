@@ -85,7 +85,7 @@ func NewSecurityProfile(selector cgroupModel.WorkloadSelector, eventTypes []mode
 		versionContexts: make(map[string]VersionContext),
 	}
 	if selector.Tag != "" {
-		sp.versionContexts[selector.Tag] = VersionContext{
+		sp.versionContexts[selector.Tag] = &VersionContext{
 			eventTypeState: make(map[model.EventType]*EventTypeState),
 		}
 	}
@@ -97,7 +97,7 @@ func (p *SecurityProfile) reset() {
 	p.loadedInKernel = false
 	p.loadedNano = 0
 	p.profileCookie = 0
-	p.versionContexts = make(map[string]VersionContext)
+	p.versionContexts = make(map[string]*VersionContext)
 	p.Instances = nil
 }
 
@@ -270,6 +270,30 @@ func (p *SecurityProfile) evictProfileVersion() {
 	p.ActivityTree.EvictImageTag(oldestImageTag)
 }
 
+func (p *SecurityProfile) makeRoomForNewVersion(maxImageTags int) {
+	// if we reached the max number of versions, we should evict the surplus
+	surplus := len(p.versionContexts) - maxImageTags + 1
+	for surplus > 0 {
+		p.evictProfileVersion()
+		surplus--
+	}
+}
+
+func (p *SecurityProfile) prepareNewVersion(newImageTag string, tags []string, maxImageTags int) {
+	// prepare new profile context to be inserted
+	newProfileCtx := &VersionContext{
+		eventTypeState: make(map[model.EventType]*EventTypeState),
+		firstSeenNano:  uint64(time.Now().UnixNano()),
+		lastSeenNano:   uint64(time.Now().UnixNano()),
+		Tags:           tags,
+	}
+
+	// add the new profile context to the list
+	// (versionContextsLock already locked here)
+	p.makeRoomForNewVersion(maxImageTags)
+	p.versionContexts[newImageTag] = newProfileCtx
+}
+
 func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageTags int) {
 	newImageTag := newVersion.selector.Tag
 	_, ok := p.versionContexts[newImageTag]
@@ -277,20 +301,17 @@ func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageT
 		return
 	}
 	// prepare new profile context to be inserted
+	newVersion.versionContexts[newImageTag].firstSeenNano = uint64(time.Now().UnixNano())
+	newVersion.versionContexts[newImageTag].lastSeenNano = uint64(time.Now().UnixNano())
 	newProfileCtx, ok := newVersion.versionContexts[newImageTag]
 	if !ok { // should not happen neither
 		return
 	}
-	newProfileCtx.firstSeenNano = uint64(time.Now().UnixNano())
-	newProfileCtx.lastSeenNano = uint64(time.Now().UnixNano())
 
 	// add the new profile context to the list
-	// if we reached the max number of versions, we should evict the surplus
-	surplus := len(p.versionContexts) - maxImageTags
-	for surplus > 0 {
-		p.evictProfileVersion()
-		surplus--
-	}
+	p.versionContextsLock.Lock()
+	defer p.versionContextsLock.Unlock()
+	p.makeRoomForNewVersion(maxImageTags)
 	p.versionContexts[newImageTag] = newProfileCtx
 
 	// finally, merge the trees

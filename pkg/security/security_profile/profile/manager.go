@@ -758,6 +758,18 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	if imageTag == "" {
 		imageTag = "latest" // not sure about this one
 	}
+
+	profile.versionContextsLock.Lock()
+	_, found := profile.versionContexts[imageTag]
+	if found {
+		// update the lastseen of this version
+		profile.versionContexts[imageTag].lastSeenNano = uint64(time.Now().UnixNano())
+	} else {
+		// create a new version
+		profile.prepareNewVersion(imageTag, event.ContainerContext.Tags, m.config.RuntimeSecurity.SecurityProfileMaxImageTags)
+	}
+	profile.versionContextsLock.Unlock()
+
 	profileState := m.tryAutolearn(profile, event, imageTag)
 	switch profileState {
 	case NoProfile, ProfileAtMaxSize, UnstableEventType:
