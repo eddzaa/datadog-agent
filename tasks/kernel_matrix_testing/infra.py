@@ -9,17 +9,27 @@ from tasks.kernel_matrix_testing.tool import Exit, error
 class LocalCommandRunner:
     @staticmethod
     def run_cmd(ctx, _, cmd, allow_fail, verbose):
-        res = ctx.run(cmd.format(proxy_cmd=""), hide=(not verbose))
+        res = ctx.run(cmd.format(proxy_cmd=""), hide=(not verbose), warn=allow_fail)
         if not res.ok:
             error(f"[-] Failed: {cmd}")
             if allow_fail:
-                return
+                return False
             print_failed(res.stderr)
             raise Exit("command failed")
 
+        return True
+
     @staticmethod
-    def move_to_shared_directory(ctx, _, source):
-        ctx.run(f"cp {source} {get_kmt_os().shared_dir}")
+    def move_to_shared_directory(ctx, _, source, subdir=None):
+        recursive = ""
+        if os.path.isdir(source):
+            recursive = "-R"
+
+        full_target = get_kmt_os().shared_dir
+        if subdir is not None:
+            full_target = os.path.join(get_kmt_os().shared_dir, subdir)
+            ctx.run(f"mkdir -p {full_target}")
+        ctx.run(f"cp {recursive} {source} {full_target}")
 
 
 class RemoteCommandRunner:
@@ -30,18 +40,26 @@ class RemoteCommandRunner:
                 proxy_cmd=f"-o ProxyCommand='ssh -o StrictHostKeyChecking=no -i {instance.ssh_key} -W %h:%p ubuntu@{instance.ip}'"
             ),
             hide=(not verbose),
+            warn=allow_fail,
         )
         if not res.ok:
             error(f"[-] Failed: {cmd}")
             if allow_fail:
-                return
+                return False
             print_failed(res.stderr)
             raise Exit("command failed")
 
+        return True
+
     @staticmethod
-    def move_to_shared_directory(ctx, instance, source):
+    def move_to_shared_directory(ctx, instance, source, subdir=None):
+        full_target = get_kmt_os().shared_dir
+        if subdir is not None:
+            full_target = os.path.join(get_kmt_os().shared_dir, subdir)
+            self.run_cmd(ctx, instance, f"mkdir -p {full_target}", False, False)
+
         ctx.run(
-            f"rsync -e \"ssh -o StrictHostKeyChecking=no -i {instance.ssh_key}\" -p -rt --exclude='.git*' --filter=':- .gitignore' {source} ubuntu@{instance.ip}:{get_kmt_os().shared_dir}"
+            f"rsync -e \"ssh -o StrictHostKeyChecking=no -i {instance.ssh_key}\" -p -rt --exclude='.git*' --filter=':- .gitignore' {source} ubuntu@{instance.ip}:{full_target}"
         )
 
 
@@ -70,11 +88,11 @@ class LibvirtDomain:
 
     def run_cmd(self, ctx, cmd, allow_fail=False, verbose=False):
         run = f"ssh -o StrictHostKeyChecking=no -i {self.ssh_key} root@{self.ip} {{proxy_cmd}} '{cmd}'"
-        self.instance.runner.run_cmd(ctx, self.instance, run, allow_fail, verbose)
+        return self.instance.runner.run_cmd(ctx, self.instance, run, allow_fail, verbose)
 
     def copy(self, ctx, source, target):
         run = f"rsync -e \"ssh -o StrictHostKeyChecking=no {{proxy_cmd}} -i {self.ssh_key}\" -p -rt --exclude='.git*' --filter=':- .gitignore' {source} root@{self.ip}:{target}"
-        self.instance.runner.run_cmd(ctx, self.instance, run, False, False)
+        return self.instance.runner.run_cmd(ctx, self.instance, run, False, False)
 
     def __repr__(self):
         return f"<LibvirtDomain> {self.name} {self.ip}"
@@ -98,8 +116,8 @@ class HostInstance:
     def add_microvm(self, domain: LibvirtDomain):
         self.microvms.append(domain)
 
-    def copy_to_all_vms(self, ctx, path):
-        self.runner.move_to_shared_directory(ctx, self, path)
+    def copy_to_all_vms(self, ctx, path, subdir=None):
+        self.runner.move_to_shared_directory(ctx, self, path, subdir)
 
     def __repr__(self):
         return f"<HostInstance> {self.ip} {self.arch}"
