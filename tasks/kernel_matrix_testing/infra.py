@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.stacks import ask_for_ssh, find_ssh_key
@@ -79,16 +80,23 @@ class LibvirtDomain:
     def __repr__(self):
         return f"<LibvirtDomain> {self.name} {self.ip}"
 
+    def get_libvirt_object(self, conn):
+        for domain in conn.listAllDomains():
+            if domain.name().endswith(self.name):
+                return domain
+
+        return None
+
 
 class HostInstance:
-    def __init__(self, ip, arch, ssh_key):
+    def __init__(self, ip: str, arch: str, ssh_key):
         self.ip = ip
         self.arch = arch
         self.ssh_key = ssh_key
-        self.microvms = []
+        self.microvms: list[LibvirtDomain] = []
         self.runner = get_instance_runner(arch)
 
-    def add_microvm(self, domain):
+    def add_microvm(self, domain: LibvirtDomain):
         self.microvms.append(domain)
 
     def copy_to_all_vms(self, ctx, path):
@@ -98,12 +106,12 @@ class HostInstance:
         return f"<HostInstance> {self.ip} {self.arch}"
 
 
-def build_infrastructure(stack, remote_ssh_key=None):
+def build_infrastructure(stack: str | Path, remote_ssh_key=None):
     stack_outputs = os.path.join(get_kmt_os().stacks_dir, stack, "stack.output")
     with open(stack_outputs, 'r') as f:
         infra_map = json.load(f)
 
-    infra = dict()
+    infra: dict[str, HostInstance] = dict()
     for arch in infra_map:
         if arch != "local" and remote_ssh_key is None:
             if ask_for_ssh():

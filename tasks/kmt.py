@@ -17,7 +17,7 @@ from tasks.kernel_matrix_testing.infra import build_infrastructure
 from tasks.kernel_matrix_testing.init_kmt import init_kernel_matrix_testing_system
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.stacks import check_and_get_stack
-from tasks.kernel_matrix_testing.tool import Exit, ask, info, warn
+from tasks.kernel_matrix_testing.tool import Exit, ask, error, info, warn
 from tasks.libs.common.gitlab import Gitlab, get_gitlab_token
 from tasks.system_probe import EMBEDDED_SHARE_DIR
 
@@ -25,6 +25,8 @@ try:
     from tabulate import tabulate
 except ImportError:
     tabulate = None
+
+import libvirt
 
 X86_AMI_ID_SANDBOX = "ami-0d1f81cfdbd5b0188"
 ARM_AMI_ID_SANDBOX = "ami-02cb18e91afb3777c"
@@ -206,6 +208,38 @@ def ls(_, distro=False, custom=False):
 @task
 def init(ctx, lite=False):
     init_kernel_matrix_testing_system(ctx, lite)
+
+
+@task
+def status(_):
+    """Show the current status of all KMT stacks"""
+    for stack in get_kmt_os().stacks_dir.iterdir():
+        if not stack.is_dir():
+            continue
+
+        print(f"\n===== Stack {stack.name} =====")
+
+        output = stack / "stack.output"
+        if not output.exists():
+            error("[x] no stack.output file found, invalid state")
+            continue
+
+        for _, instance in build_infrastructure(stack, remote_ssh_key="").items():
+            if instance.arch == "local":
+                print("=== Local host ===")
+            else:
+                print(f"=== Remote {instance.arch} host @ {instance.ip} ===")
+
+            for domain in instance.microvms:
+                if instance.arch == "local":
+                    conn = libvirt.open(get_kmt_os().libvirt_socket)
+                    lv_domain = domain.get_libvirt_object(conn)
+
+                    status = "running" if lv_domain is not None and lv_domain.isActive() else "stopped"
+                else:
+                    status = "unknown"
+
+                print(f" · {domain.name} ({domain.tag}) @ {domain.ip} | {status}")
 
 
 @task
