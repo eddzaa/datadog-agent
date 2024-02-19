@@ -444,12 +444,14 @@ func (pn *ProcessNode) merge(new *ProcessNode, pReducer *PathsReducer) {
 	// merge image tags
 	if len(new.ImageTags) > 0 {
 		pn.ImageTags = append(pn.ImageTags, new.ImageTags...)
+		slices.Sort(pn.ImageTags)
 		pn.ImageTags = slices.Compact(pn.ImageTags)
 	}
 
 	// merge Syscalls
 	if len(new.Syscalls) > 0 {
 		pn.Syscalls = append(pn.Syscalls, new.Syscalls...)
+		slices.Sort(pn.Syscalls)
 		pn.Syscalls = slices.Compact(pn.Syscalls)
 	}
 

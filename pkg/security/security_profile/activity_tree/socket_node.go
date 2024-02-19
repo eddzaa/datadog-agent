@@ -32,6 +32,7 @@ type SocketNode struct {
 
 func (bn *BindNode) merge(toMerge *BindNode) {
 	bn.ImageTags = append(bn.ImageTags, toMerge.ImageTags...)
+	slices.Sort(bn.ImageTags)
 	bn.ImageTags = slices.Compact(bn.ImageTags)
 }
 

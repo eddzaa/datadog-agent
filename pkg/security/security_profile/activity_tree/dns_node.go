@@ -29,6 +29,7 @@ func (dn *DNSNode) merge(new *DNSNode) {
 	// merge image tags
 	if len(new.ImageTags) > 0 {
 		dn.ImageTags = append(dn.ImageTags, new.ImageTags...)
+		slices.Sort(dn.ImageTags)
 		dn.ImageTags = slices.Compact(dn.ImageTags)
 	}
 

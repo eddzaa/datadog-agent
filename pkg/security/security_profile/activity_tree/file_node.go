@@ -202,6 +202,7 @@ func (fn *FileNode) merge(new *FileNode, pNode *ProcessNode, pReducer *PathsRedu
 	// merge image tags
 	if len(new.ImageTags) > 0 {
 		fn.ImageTags = append(fn.ImageTags, new.ImageTags...)
+		slices.Sort(fn.ImageTags)
 		fn.ImageTags = slices.Compact(fn.ImageTags)
 	}
 
