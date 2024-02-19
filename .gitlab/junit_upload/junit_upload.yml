@@ -13,8 +13,7 @@ unit_tests_arm64_windows_junit_upload:
     - tests_windows-x64-fast-v2
   script:
     - source /root/.bashrc
-    # Install the ci-visbility standalone CLI and upload junits
-    - curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci" && chmod +x /usr/local/bin/datadog-ci
+    # Upload generated junit files
     - set +x
     - export DATADOG_API_KEY=$(aws ssm get-parameter --region us-east-1 --name ci.datadog-agent.datadog_api_key_org2 --with-decryption --query "Parameter.Value" --out text)
     - set -x
@@ -53,8 +52,7 @@ system_probe_arm64_junit_upload:
       optional: true
   script:
     - source /root/.bashrc
-    # Install the ci-visbility standalone CLI and upload junits
-    - curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci" && chmod +x /usr/local/bin/datadog-ci
+    # Upload generated junit files
     - set +x
     - export DATADOG_API_KEY=$(aws ssm get-parameter --region us-east-1 --name ci.datadog-agent.datadog_api_key_org2 --with-decryption --query "Parameter.Value" --out text)
     - set -x
