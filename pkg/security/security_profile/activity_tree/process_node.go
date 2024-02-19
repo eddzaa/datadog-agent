@@ -482,8 +482,8 @@ func (pn *ProcessNode) merge(new *ProcessNode, pReducer *PathsReducer) {
 		}
 	}
 	// append the new proccesses if any
-	if len(newProcesses) > 0 {
-		pn.Children = append(pn.Children, newProcesses...)
+	for _, node := range newProcesses {
+		pn.AppendChild(node)
 	}
 }
 

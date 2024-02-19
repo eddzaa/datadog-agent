@@ -832,7 +832,7 @@ func (at *ActivityTree) Merge(newTree *ActivityTree) {
 		}
 	}
 	// append the new proccesses if any
-	if len(newProcesses) > 0 {
-		at.ProcessNodes = append(at.ProcessNodes, newProcesses...)
+	for _, node := range newProcesses {
+		at.AppendChild(node)
 	}
 }
