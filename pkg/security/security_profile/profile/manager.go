@@ -770,6 +770,13 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	}
 	profile.versionContextsLock.Unlock()
 
+	// if we have one version of the profile in unstable, just skip the whole process
+	globalProfilState := profile.GetGlobalState()
+	if globalProfilState == UnstableEventType {
+		m.incrementEventFilteringStat(event.GetEventType(), UnstableEventType, NA)
+		return
+	}
+
 	profileState := m.tryAutolearn(profile, event, imageTag)
 	switch profileState {
 	case NoProfile, ProfileAtMaxSize, UnstableEventType:
@@ -817,7 +824,7 @@ func (m *SecurityProfileManager) tryAutolearn(profile *SecurityProfile, event *m
 		nodeType = activity_tree.ProfileDrift
 	} else if profileState == WorkloadWarmup {
 		nodeType = activity_tree.WorkloadWarmup
-	} else {
+	} else { // Stable or Unstable state
 		return profileState
 	}
 
