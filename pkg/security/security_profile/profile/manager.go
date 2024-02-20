@@ -876,7 +876,7 @@ func (m *SecurityProfileManager) ListSecurityProfiles(params *api.SecurityProfil
 	defer m.profilesLock.Unlock()
 
 	for _, p := range m.profiles {
-		msg := p.ToSecurityProfileMessage(m.resolvers.TimeResolver, m.config.RuntimeSecurity)
+		msg := p.ToSecurityProfileMessage(m.resolvers.TimeResolver)
 		out.Profiles = append(out.Profiles, msg)
 	}
 
@@ -888,7 +888,7 @@ func (m *SecurityProfileManager) ListSecurityProfiles(params *api.SecurityProfil
 			if !ok {
 				continue
 			}
-			msg := p.ToSecurityProfileMessage(m.resolvers.TimeResolver, m.config.RuntimeSecurity)
+			msg := p.ToSecurityProfileMessage(m.resolvers.TimeResolver)
 			out.Profiles = append(out.Profiles, msg)
 		}
 	}

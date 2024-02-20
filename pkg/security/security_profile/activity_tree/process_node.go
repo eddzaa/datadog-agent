@@ -508,10 +508,7 @@ func (pn *ProcessNode) mergeSockets(new *ProcessNode) {
 	for _, newSock := range new.Sockets {
 		// first, search for the socket family
 		index := slices.IndexFunc(pn.Sockets, func(current *SocketNode) bool {
-			if current.Matches(newSock) {
-				return true
-			}
-			return false
+			return current.Matches(newSock)
 		})
 		if index == -1 { // if not found, append directly the whole socket
 			sockToAdd = append(sockToAdd, newSock)
@@ -522,10 +519,7 @@ func (pn *ProcessNode) mergeSockets(new *ProcessNode) {
 		bindToAdd := []*BindNode{}
 		for _, bind := range newSock.Bind {
 			i := slices.IndexFunc(currentSock.Bind, func(current *BindNode) bool {
-				if current.Matches(bind) {
-					return true
-				}
-				return false
+				return current.Matches(bind)
 			})
 			// if not found, append directly to the binds
 			if index == -1 {

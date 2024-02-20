@@ -21,7 +21,6 @@ import (
 	proto "github.com/DataDog/agent-payload/v5/cws/dumpsv1"
 	"github.com/DataDog/datadog-go/v5/statsd"
 
-	"github.com/DataDog/datadog-agent/pkg/security/config"
 	"github.com/DataDog/datadog-agent/pkg/security/proto/api"
 	cgroupModel "github.com/DataDog/datadog-agent/pkg/security/resolvers/cgroup/model"
 	timeResolver "github.com/DataDog/datadog-agent/pkg/security/resolvers/time"
@@ -168,7 +167,7 @@ func (p *SecurityProfile) SendStats(client statsd.ClientInterface) error {
 }
 
 // ToSecurityProfileMessage returns a SecurityProfileMessage filled with the content of the current Security Profile
-func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Resolver, cfg *config.RuntimeSecurityConfig) *api.SecurityProfileMessage {
+func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Resolver) *api.SecurityProfileMessage {
 	// construct the list of image tags for this profile
 	imageTags := ""
 	for key := range p.versionContexts {
@@ -236,7 +235,7 @@ func (p *SecurityProfile) GetState(imageTag string) EventFilteringProfileState {
 // GetGlobalState returns the global state of a profile: AutoLearning, StableEventType or UnstableEventType
 func (p *SecurityProfile) GetGlobalState() EventFilteringProfileState {
 	globalState := AutoLearning
-	for imageTag, _ := range p.versionContexts {
+	for imageTag := range p.versionContexts {
 		state := p.GetState(imageTag)
 		if state == UnstableEventType {
 			return UnstableEventType
@@ -247,7 +246,7 @@ func (p *SecurityProfile) GetGlobalState() EventFilteringProfileState {
 	return globalState // AutoLearning or StableEventType
 }
 
-// GetGlobalState returns the global state of a profile: AutoLearning, StableEventType or UnstableEventType
+// GetGlobalEventTypeState returns the global state of a profile for a given event type: AutoLearning, StableEventType or UnstableEventType
 func (p *SecurityProfile) GetGlobalEventTypeState(et model.EventType) EventFilteringProfileState {
 	globalState := AutoLearning
 	for _, ctx := range p.versionContexts {
