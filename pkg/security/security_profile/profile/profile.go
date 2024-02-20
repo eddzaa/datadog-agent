@@ -60,7 +60,7 @@ type SecurityProfile struct {
 	profileCookie       uint64
 	eventTypes          []model.EventType
 	versionContextsLock sync.Mutex
-	versionContexts     map[string]VersionContext
+	versionContexts     map[string]*VersionContext
 
 	// Instances is the list of workload instances to witch the profile should apply
 	Instances []*cgroupModel.CacheEntry
@@ -82,7 +82,7 @@ func NewSecurityProfile(selector cgroupModel.WorkloadSelector, eventTypes []mode
 	sp := &SecurityProfile{
 		selector:        selector,
 		eventTypes:      eventTypes,
-		versionContexts: make(map[string]VersionContext),
+		versionContexts: make(map[string]*VersionContext),
 	}
 	if selector.Tag != "" {
 		sp.versionContexts[selector.Tag] = &VersionContext{
@@ -238,6 +238,20 @@ func (p *SecurityProfile) GetGlobalState() EventFilteringProfileState {
 	globalState := AutoLearning
 	for imageTag, _ := range p.versionContexts {
 		state := p.GetState(imageTag)
+		if state == UnstableEventType {
+			return UnstableEventType
+		} else if state == StableEventType {
+			globalState = StableEventType
+		}
+	}
+	return globalState // AutoLearning or StableEventType
+}
+
+// GetGlobalState returns the global state of a profile: AutoLearning, StableEventType or UnstableEventType
+func (p *SecurityProfile) GetGlobalEventTypeState(et model.EventType) EventFilteringProfileState {
+	globalState := AutoLearning
+	for _, ctx := range p.versionContexts {
+		state := ctx.eventTypeState[et].state
 		if state == UnstableEventType {
 			return UnstableEventType
 		} else if state == StableEventType {

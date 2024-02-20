@@ -760,10 +760,10 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	}
 
 	profile.versionContextsLock.Lock()
-	_, found := profile.versionContexts[imageTag]
+	ctx, found := profile.versionContexts[imageTag]
 	if found {
 		// update the lastseen of this version
-		profile.versionContexts[imageTag].lastSeenNano = uint64(time.Now().UnixNano())
+		ctx.lastSeenNano = uint64(time.Now().UnixNano())
 	} else {
 		// create a new version
 		profile.prepareNewVersion(imageTag, event.ContainerContext.Tags, m.config.RuntimeSecurity.SecurityProfileMaxImageTags)
@@ -787,6 +787,7 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 		// the event was either already in the profile, or has just been inserted
 		FillProfileContextFromProfile(&event.SecurityProfileContext, profile, imageTag)
 		event.AddToFlags(model.EventFlagsSecurityProfileInProfile)
+
 		return
 	case StableEventType:
 		// check if the event is in its profile
@@ -852,6 +853,14 @@ func (m *SecurityProfileManager) tryAutolearn(profile *SecurityProfile, event *m
 				eventState.lastAnomalyNano = event.TimestampRaw
 			}
 		}
+
+		// if a previous version of this profile was stable for this event type,
+		// and a new entry was added, trigger an anomaly detection
+		globalEventTypeState := profile.GetGlobalEventTypeState(event.GetEventType())
+		if globalEventTypeState == StableEventType && m.canGenerateAnomaliesFor(event) {
+			event.AddToFlags(model.EventFlagsAnomalyDetectionEvent)
+		}
+
 		m.incrementEventFilteringStat(event.GetEventType(), profileState, NotInProfile)
 	} else { // no newEntry
 		m.incrementEventFilteringStat(event.GetEventType(), profileState, InProfile)
