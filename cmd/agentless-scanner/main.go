@@ -135,6 +135,7 @@ func rootCommand() *cobra.Command {
 	cmd.AddCommand(runCommand())
 	cmd.AddCommand(runScannerCommand())
 	cmd.AddCommand(awsGroupCommand(cmd))
+	cmd.AddCommand(azureGroupCommand(cmd))
 	cmd.AddCommand(localGroupCommand(cmd))
 
 	defaultActions := []string{
@@ -286,8 +287,8 @@ func getDefaultRolesMapping(provider types.CloudProvider) types.RolesMapping {
 func detectCloudProvider(s string) (types.CloudProvider, error) {
 	if s == "auto" {
 		// Amazon EC2 T4g
-		boardVendor, err := os.ReadFile("/sys/devices/virtual/dmi/id/board_vendor")
-		if err == nil && bytes.Equal(boardVendor, []byte("Amazon EC2\n")) {
+		boardVendor, errBoardVendor := os.ReadFile("/sys/devices/virtual/dmi/id/board_vendor")
+		if errBoardVendor == nil && bytes.Equal(boardVendor, []byte("Amazon EC2\n")) {
 			return types.CloudProviderAWS, nil
 		}
 		// Amazon EC2 M4
@@ -295,6 +296,15 @@ func detectCloudProvider(s string) (types.CloudProvider, error) {
 		if err == nil && bytes.Contains(productVersion, []byte("amazon")) {
 			return types.CloudProviderAWS, nil
 		}
+
+		// Azure
+		boardName, errBoardName := os.ReadFile("/sys/devices/virtual/dmi/id/board_name")
+		if errBoardVendor == nil && bytes.Equal(boardVendor, []byte("Microsoft Corporation\n")) &&
+			errBoardName == nil && bytes.Equal(boardName, []byte("Virtual Machine\n")) {
+			// This detects Hyper-V VMs. To be sure we are running on Azure, we would need to check the IMDS.
+			return types.CloudProviderAzure, nil
+		}
+
 		return "", fmt.Errorf("could not detect cloud provider automatically, please specify one using --cloud-provider flag")
 	}
 	return types.ParseCloudProvider(s)
