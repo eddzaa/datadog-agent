@@ -3,12 +3,13 @@ import itertools
 import json
 import os
 import platform
+from typing import Literal, Tuple, Union
 from urllib.parse import urlparse
 
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.stacks import check_and_get_stack, create_stack, stack_exists
 from tasks.kernel_matrix_testing.tool import Exit, ask, info, warn
-from tasks.kernel_matrix_testing.vars import VMCONFIG, arch_mapping, platforms_file
+from tasks.kernel_matrix_testing.vars import VMCONFIG, Arch, arch_mapping, platforms_file
 
 local_arch = "local"
 

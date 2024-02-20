@@ -3,11 +3,8 @@ import json
 import os
 import platform
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional
 
-from invoke.context import Context
-
-from tasks.kernel_matrix_testing.compiler import get_compiler
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.libvirt import (
     delete_domains,

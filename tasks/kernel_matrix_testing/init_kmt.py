@@ -1,7 +1,7 @@
 import getpass
 import os
 
-from tasks.kernel_matrix_testing.compiler import build_compiler
+from tasks.kernel_matrix_testing.compiler import all_compilers
 from tasks.kernel_matrix_testing.download import download_rootfs
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.tool import info, is_root
@@ -36,4 +36,5 @@ def init_kernel_matrix_testing_system(ctx, lite):
     kmt_os.assert_user_in_docker_group(ctx)
     info(f"[+] User '{os.getlogin()}' in group 'docker'")
 
-    build_compiler(ctx)
+    for cc in all_compilers(ctx):
+        cc.build()

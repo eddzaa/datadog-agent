@@ -2,23 +2,24 @@ import json
 import os
 import platform
 import re
-import tempfile
 import shutil
+import tempfile
 from glob import glob
 from pathlib import Path
+from typing import Optional, Union
 
 from invoke import task
+from invoke.context import Context
 
 from tasks.kernel_matrix_testing import stacks, vmconfig
-from tasks.kernel_matrix_testing.compiler import build_compiler as build_cc
-from tasks.kernel_matrix_testing.compiler import compiler_running, docker_exec
-from tasks.kernel_matrix_testing.compiler import start_compiler as start_cc
+from tasks.kernel_matrix_testing.compiler import CompilerImage, get_compiler
 from tasks.kernel_matrix_testing.download import arch_mapping, update_rootfs
-from tasks.kernel_matrix_testing.infra import build_infrastructure
+from tasks.kernel_matrix_testing.infra import HostInstance, LibvirtDomain, build_infrastructure
 from tasks.kernel_matrix_testing.init_kmt import init_kernel_matrix_testing_system
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.stacks import check_and_get_stack
-from tasks.kernel_matrix_testing.tool import Exit, ask, error, info, warn
+from tasks.kernel_matrix_testing.tool import Exit, ask, error, full_arch, get_binary_target_arch, info, warn
+from tasks.kernel_matrix_testing.vars import Arch
 from tasks.libs.common.gitlab import Gitlab, get_gitlab_token
 from tasks.system_probe import EMBEDDED_SHARE_DIR
 
@@ -27,7 +28,10 @@ try:
 except ImportError:
     tabulate = None
 
-import libvirt
+try:
+    import libvirt
+except ImportError:
+    libvirt = None
 
 X86_AMI_ID_SANDBOX = "ami-0d1f81cfdbd5b0188"
 ARM_AMI_ID_SANDBOX = "ami-02cb18e91afb3777c"
@@ -259,12 +263,16 @@ def update_resources(ctx):
 
 @task
 def build_compiler(ctx):
-    build_cc(ctx)
+    for arch in arch_mapping.values():
+        c = CompilerImage(ctx, arch)
+        c.build()
 
 
 @task
 def start_compiler(ctx):
-    start_cc(ctx)
+    for arch in arch_mapping.values():
+        c = CompilerImage(ctx, arch)
+        c.start()
 
 
 def filter_target_domains(vms: str, infra: "dict[str, HostInstance]"):
@@ -283,85 +291,112 @@ TOOLS_PATH = '/datadog-agent/internal/tools'
 GOTESTSUM = "gotest.tools/gotestsum"
 
 
-def download_gotestsum(ctx):
+def download_gotestsum(ctx, arch: Arch):
     fgotestsum = "./test/kitchen/site-cookbooks/dd-system-probe-check/files/default/gotestsum"
+
     if os.path.isfile(fgotestsum):
-        return
+        file_arch = get_binary_target_arch(ctx, fgotestsum)
+        if file_arch == arch:
+            return
 
-    if not os.path.exists("kmt-deps/tools"):
-        ctx.run("mkdir -p kmt-deps/tools")
+    paths = KMTPaths("", arch)
+    paths.tools.mkdir(parents=True, exist_ok=True)
 
-    docker_exec(
-        ctx,
-        f"cd {TOOLS_PATH} && go install {GOTESTSUM} && cp /go/bin/gotestsum /datadog-agent/kmt-deps/tools/",
+    cc = get_compiler(ctx, arch)
+    cc.exec(
+        f"cd {TOOLS_PATH} && go install {GOTESTSUM} && cp /go/bin/gotestsum /datadog-agent/{paths.tools}",
     )
 
-    ctx.run(f"cp kmt-deps/tools/gotestsum {fgotestsum}")
+    ctx.run(f"cp {paths.tools}/gotestsum {fgotestsum}")
 
 
-def full_arch(arch):
-    if arch == "local":
-        return arch_mapping[platform.machine()]
-    return arch
+class KMTPaths:
+    def __init__(self, stack: str, arch: Arch):
+        self.stack = stack
+        self.arch = arch
+
+    @property
+    def root(self):
+        return Path("kmt-deps")
+
+    @property
+    def arch_dir(self):
+        return self.stack_dir / self.arch
+
+    @property
+    def stack_dir(self):
+        return self.root / self.stack
+
+    @property
+    def dependencies(self):
+        return self.arch_dir / "dependencies"
+
+    @property
+    def dependencies_archive(self):
+        return self.arch_dir / f"dependencies-{self.arch}.tar.gz"
+
+    @property
+    def tests_archive(self):
+        return self.arch_dir / f"tests-{self.arch}.tar.gz"
+
+    @property
+    def tools(self):
+        return self.root / self.arch / "tools"
 
 
-def build_tests_package(ctx, source_dir, stack, arch, ci, verbose=True):
-    root = os.path.join(source_dir, "kmt-deps")
-    test_archive = f"tests-{arch}.tar.gz"
+def build_tests_package(ctx, source_dir, stack, arch: Arch, ci, verbose=True):
+    test_archive = KMTPaths(stack, arch).tests_archive
     if not ci:
-        system_probe_tests = os.path.join(root, stack, "opt/system-probe-tests")
+        system_probe_tests = test_archive.parent / "opt/system-probe-tests"
         test_pkgs = os.path.join(
             source_dir, "test/kitchen/site-cookbooks/dd-system-probe-check/files/default/tests/pkg"
         )
         ctx.run(f"rm -rf {system_probe_tests} && mkdir -p {system_probe_tests}", hide=(not verbose))
         ctx.run(f"cp -R {test_pkgs} {system_probe_tests}", hide=(not verbose))
-        with ctx.cd(os.path.join(root, stack)):
-            ctx.run(f"tar czvf {test_archive} opt", hide=(not verbose))
+        with ctx.cd(test_archive.parent):
+            ctx.run(f"tar czvf {test_archive.name} opt", hide=(not verbose))
 
 
 @task
-def build_dependencies(ctx, arch, layout_file, source_dir, ci=False, stack=None, verbose=True):
-    root = os.path.join(source_dir, "kmt-deps")
-    deps_dir = os.path.join(root, "dependencies")
+def build_dependencies(ctx, arch: Arch, layout_file, source_dir: Union[str, Path], ci=False, stack=None, verbose=True):
+    source_dir = Path(source_dir)
+    paths = KMTPaths("", arch)
     if not ci:
         if stack is None:
             raise Exit("no stack name provided")
-        deps_dir = os.path.join(root, stack, "dependencies")
+        paths.stack = stack
         # in the CI we can rely on gotestsum being present
-        download_gotestsum(ctx)
+        download_gotestsum(ctx, arch)
 
-    if os.path.exists(deps_dir):
-        shutil.rmtree(deps_dir)
+    if paths.dependencies.exists():
+        shutil.rmtree(paths.dependencies)
 
-    Path(deps_dir).mkdir(parents=True)
+    paths.dependencies.mkdir(parents=True)
 
     with open(layout_file) as f:
         deps_layout = json.load(f)
-    with ctx.cd(deps_dir):
+    with ctx.cd(paths.dependencies):
         for new_dirs in deps_layout["layout"]:
             ctx.run(f"mkdir -p {new_dirs}", hide=(not verbose))
 
     for source in deps_layout["copy"]:
         target = deps_layout["copy"][source]
-        ctx.run(f"cp {os.path.join(source_dir, source)} {os.path.join(deps_dir, target)}", hide=(not verbose))
+        ctx.run(f"cp {source_dir / source} {paths.dependencies / target}", hide=(not verbose))
 
-    exec_context = lambda ctx, command, directory: docker_exec(
-        ctx, command, run_dir=f"/datadog-agent/{directory}", verbose=verbose
-    )
-    if ci:
-        exec_context = lambda ctx, command, directory: ctx.run(
-            f"cd {os.path.join(source_dir, directory)} && {command}", hide=(not verbose)
-        )
+    cc = get_compiler(ctx, arch)
+
     for build in deps_layout["build"]:
         directory = deps_layout["build"][build]["directory"]
         command = deps_layout["build"][build]["command"]
-        artifact = os.path.join(source_dir, deps_layout["build"][build]["artifact"])
-        exec_context(ctx, command, directory)
-        ctx.run(f"cp {artifact} {deps_dir}", hide=(not verbose))
+        artifact = source_dir / deps_layout["build"][build]["artifact"]
+        if ci:
+            ctx.run(f"cd {source_dir / directory} && {command}", hide=(not verbose))
+        else:
+            cc.exec(command, run_dir=f"/datadog-agent/{directory}", verbose=verbose)
+        ctx.run(f"cp {artifact} {paths.dependencies}", hide=(not verbose))
 
-    archive_name = f"dependencies-{arch}.tar.gz"
-    with ctx.cd(os.path.join(root, stack)):
-        ctx.run(f"tar czvf {archive_name} dependencies", hide=(not verbose))
+    with ctx.cd(paths.dependencies.parent):
+        ctx.run(f"tar czvf {paths.dependencies_archive.name} {paths.dependencies.name}", hide=(not verbose))
 
 
 def is_root():
@@ -383,8 +418,18 @@ def vms_have_correct_deps(ctx, domains: "list[LibvirtDomain]", depsfile):
     return True
 
 
+def needs_build_from_scratch(ctx: Context, paths: KMTPaths, domains: "list[LibvirtDomain]", full_rebuild: bool):
+    return (
+        full_rebuild
+        or (not paths.dependencies.exists())
+        or (not vms_have_correct_deps(ctx, domains, paths.dependencies_archive))
+    )
+
+
 @task
-def prepare(ctx, vms, stack=None, arch=None, ssh_key=None, full_rebuild=False, packages="", verbose=True):
+def prepare(
+    ctx, vms, stack=None, arch: Optional[Arch] = None, ssh_key=None, full_rebuild=False, packages="", verbose=True
+):
     stack = check_and_get_stack(stack)
     if not stacks.stack_exists(stack):
         raise Exit(f"Stack {stack} does not exist. Please create with 'inv kmt.stack-create --stack=<name>'")
@@ -393,30 +438,28 @@ def prepare(ctx, vms, stack=None, arch=None, ssh_key=None, full_rebuild=False, p
         raise Exit("No vms specified to sync with")
 
     if not arch:
-        arch = platform.machine()
+        arch = full_arch("local")
 
     infra = build_infrastructure(stack, ssh_key)
     domains = filter_target_domains(vms, infra)
-    build_from_scratch = (
-        full_rebuild
-        or (not os.path.exists(f"kmt-deps/{stack}"))
-        or (not vms_have_correct_deps(ctx, domains, os.path.join("kmt-deps", stack, f"dependencies-{arch}.tar.gz")))
-    )
+    paths = KMTPaths(stack, arch)
+    cc = get_compiler(ctx, arch)
 
-    if not compiler_running(ctx):
-        start_compiler(ctx)
+    info("[+] Checking if we need a full rebuild...")
+    build_from_scratch = needs_build_from_scratch(ctx, paths, domains, full_rebuild)
 
     constrain_pkgs = ""
     if not build_from_scratch:
         constrain_pkgs = f"--packages={packages}"
 
-    docker_exec(
-        ctx,
+    info(f"[+] Compiling test binaries for {arch}")
+    cc.ensure_running()
+    cc.exec(
         f"git config --global --add safe.directory /datadog-agent && inv -e system-probe.kitchen-prepare --ci {constrain_pkgs}",
         run_dir="/datadog-agent",
     )
 
-    target_instances = list()
+    target_instances: list[HostInstance] = list()
     for d in domains:
         target_instances.append(d.instance)
 
@@ -427,17 +470,17 @@ def prepare(ctx, vms, stack=None, arch=None, ssh_key=None, full_rebuild=False, p
         )
 
         for instance in target_instances:
-            instance.copy_to_all_vms(ctx, f"kmt-deps/{stack}/dependencies-{full_arch(instance.arch)}.tar.gz")
+            instance.copy_to_all_vms(ctx, paths.dependencies_archive)
 
         for d in domains:
             d.run_cmd(ctx, f"/root/fetch_dependencies.sh {arch}", allow_fail=True, verbose=verbose)
             info(f"[+] Dependencies shared with target VM {d}")
 
-    tests_archive = f"tests-{arch}.tar.gz"
+    info("[+] Building tests package")
     build_tests_package(ctx, "./", stack, arch, False)
     for d in domains:
-        d.copy(ctx, f"kmt-deps/{stack}/{tests_archive}", "/")
-        d.run_cmd(ctx, f"cd / && tar xzf {tests_archive}")
+        d.copy(ctx, paths.tests_archive, "/")
+        d.run_cmd(ctx, f"cd / && tar xzf {paths.tests_archive.name}")
         info(f"[+] Tests packages setup in target VM {d}")
 
 
@@ -508,9 +551,9 @@ def test(
         tmp.flush()
 
         args = [
-            f"-packages-run-config {tmp.name}",
+            f"-packages-run-config /tmp/{os.path.basename(tmp.name)}",
             f"-retry {retry}",
-            f"-verbose" if test_logs else "",
+            "-verbose" if test_logs else "",
             f"-run-count {run_count}",
             "-test-root /opt/system-probe-tests",
         ]
@@ -533,18 +576,15 @@ def build(ctx, vms, stack=None, ssh_key=None, full_rebuild=False, verbose=True):
     if not stacks.stack_exists(stack):
         raise Exit(f"Stack {stack} does not exist. Please create with 'inv kmt.stack-create --stack=<name>'")
 
-    if not os.path.exists(f"kmt-deps/{stack}"):
-        ctx.run(f"mkdir -p kmt-deps/{stack}")
+    arch = full_arch("local")
+    paths = KMTPaths(stack, arch)
+    paths.arch_dir.mkdir(parents=True, exist_ok=True)
 
-    arch = platform.machine()
     infra = build_infrastructure(stack, ssh_key)
     domains = filter_target_domains(vms, infra)
+    cc = get_compiler(ctx, arch)
 
-    build_from_scratch = (
-        full_rebuild
-        or (not os.path.exists(f"kmt-deps/{stack}"))
-        or (not vms_have_correct_deps(ctx, domains, os.path.join("kmt-deps", stack, f"dependencies-{arch}.tar.gz")))
-    )
+    build_from_scratch = needs_build_from_scratch(ctx, paths, domains, full_rebuild)
 
     if build_from_scratch:
         build_dependencies(
@@ -562,11 +602,10 @@ def build(ctx, vms, stack=None, ssh_key=None, full_rebuild=False, verbose=True):
             d.run_cmd(ctx, f"/root/fetch_dependencies.sh {arch_mapping[platform.machine()]}")
             info(f"[+] Dependencies shared with target VM {d}")
 
-    docker_exec(
-        ctx,
+    cc.exec(
         "cd /datadog-agent && git config --global --add safe.directory /datadog-agent && inv -e system-probe.build --no-bundle",
     )
-    docker_exec(ctx, f"tar cf /datadog-agent/kmt-deps/{stack}/shared.tar {EMBEDDED_SHARE_DIR}")
+    cc.exec(f"tar cf /datadog-agent/kmt-deps/{stack}/shared.tar {EMBEDDED_SHARE_DIR}")
     for d in domains:
         d.copy(ctx, "./bin/system-probe", "/root")
         d.copy(ctx, f"kmt-deps/{stack}/shared.tar", "/")
@@ -580,7 +619,8 @@ def clean(ctx, stack=None, container=False, image=False):
     if not stacks.stack_exists(stack):
         raise Exit(f"Stack {stack} does not exist. Please create with 'inv kmt.stack-create --stack=<name>'")
 
-    docker_exec(ctx, "inv -e system-probe.clean", run_dir="/datadog-agent")
+    cc = get_compiler(ctx, full_arch("local"))
+    cc.exec("inv -e system-probe.clean", run_dir="/datadog-agent")
     ctx.run("rm -rf ./test/kitchen/site-cookbooks/dd-system-probe-check/files/default/tests/pkg")
     ctx.run(f"rm -rf kmt-deps/{stack}", warn=True)
     ctx.run(f"rm {get_kmt_os().shared_dir}/*.tar.gz", warn=True)

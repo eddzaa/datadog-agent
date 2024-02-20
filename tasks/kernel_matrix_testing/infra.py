@@ -9,7 +9,8 @@ from tasks.kernel_matrix_testing.tool import Exit, error
 class LocalCommandRunner:
     @staticmethod
     def run_cmd(ctx, _, cmd, allow_fail, verbose):
-        res = ctx.run(cmd.format(proxy_cmd=""), hide=(not verbose), warn=allow_fail)
+        cmd = cmd.format(proxy_cmd="")
+        res = ctx.run(cmd, hide=(not verbose), warn=allow_fail)
         if not res.ok:
             error(f"[-] Failed: {cmd}")
             if allow_fail:
@@ -56,7 +57,7 @@ class RemoteCommandRunner:
         full_target = get_kmt_os().shared_dir
         if subdir is not None:
             full_target = os.path.join(get_kmt_os().shared_dir, subdir)
-            self.run_cmd(ctx, instance, f"mkdir -p {full_target}", False, False)
+            RemoteCommandRunner.run_cmd(ctx, instance, f"mkdir -p {full_target}", False, False)
 
         ctx.run(
             f"rsync -e \"ssh -o StrictHostKeyChecking=no -i {instance.ssh_key}\" -p -rt --exclude='.git*' --filter=':- .gitignore' {source} ubuntu@{instance.ip}:{full_target}"
