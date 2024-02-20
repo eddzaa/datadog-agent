@@ -176,6 +176,9 @@ def list_possible():
     return result
 
 
+VMDef = Tuple[str, str, Union[Arch, Literal['local']]]
+
+
 # normalize_vm_def converts the detected user provider vm-def
 # to a standard form with consisten values for
 # recipe: [custom, distro]
@@ -183,7 +186,7 @@ def list_possible():
 # arch: [x86_64, amd64]
 # Each normalized_vm_def output corresponds to each VM
 # requested by the user
-def normalize_vm_def(possible, vm):
+def normalize_vm_def(possible, vm) -> VMDef:
     # attempt to fuzzy match user provided vm-def with the possible list.
     vm_def, _ = process.extractOne(vm, possible, scorer=fuzz.token_sort_ratio)
     recipe, version, arch = vm_def.split('-')
@@ -403,7 +406,7 @@ class VMSet:
         self.arch = arch
         self.recipe = recipe
         self.tags = tags
-        self.vms = list()
+        self.vms: list[VM] = list()
 
     def __eq__(self, other):
         for tag in self.tags:
@@ -439,7 +442,7 @@ def custom_version_prefix(version):
     return "lte_414" if lte_414(version) else "gt_414"
 
 
-def build_vmsets(normalized_vm_defs, sets):
+def build_vmsets(normalized_vm_defs: 'list[VMDef]', sets) -> 'set[VMSet]':
     vmsets = set()
     for recipe, version, arch in normalized_vm_defs:
         if recipe == "custom":
@@ -507,13 +510,13 @@ def ls_to_int(ls):
     return int_ls
 
 
-def build_normalized_vm_def_set(vms):
+def build_normalized_vm_def_set(vms: str):
     vm_types = vms.split(',')
     if len(vm_types) == 0:
         raise Exit("No VMs to boot provided")
 
     possible = list_possible()
-    normalized_vms = list()
+    normalized_vms: list[VMDef] = list()
     for vm in vm_types:
         normalized_vms.append(normalize_vm_def(possible, vm))
 

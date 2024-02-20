@@ -9,7 +9,7 @@ docker_dir=/kmt-dockers
 systemctl start docker
 ## Load docker images
 if [[ -d "${docker_dir}" ]]; then
-  find "${docker_dir}" -maxdepth 1 -type f -exec docker load -i {} \;
+    find "${docker_dir}" -maxdepth 1 -type f -exec docker load -i {} \;
 fi
 # VM provisioning end !
 

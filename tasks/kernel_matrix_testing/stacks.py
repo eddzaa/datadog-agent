@@ -3,7 +3,11 @@ import json
 import os
 import platform
 from pathlib import Path
+from typing import Optional, Set
 
+from invoke.context import Context
+
+from tasks.kernel_matrix_testing.compiler import get_compiler
 from tasks.kernel_matrix_testing.kmt_os import get_kmt_os
 from tasks.kernel_matrix_testing.libvirt import (
     delete_domains,
@@ -38,7 +42,7 @@ def _get_active_branch_name():
     raise Exit("Could not find active branch name")
 
 
-def check_and_get_stack(stack):
+def check_and_get_stack(stack: Optional[str]):
     if stack is None:
         stack = _get_active_branch_name()
 

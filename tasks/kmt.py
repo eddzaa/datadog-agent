@@ -267,9 +267,9 @@ def start_compiler(ctx):
     start_cc(ctx)
 
 
-def filter_target_domains(vms, infra):
+def filter_target_domains(vms: str, infra: "dict[str, HostInstance]"):
     vmsets = vmconfig.build_vmsets(vmconfig.build_normalized_vm_def_set(vms), [])
-    domains = list()
+    domains: list[LibvirtDomain] = list()
     for vmset in vmsets:
         for vm in vmset.vms:
             for domain in infra[vmset.arch].microvms:
@@ -368,7 +368,7 @@ def is_root():
     return os.getuid() == 0
 
 
-def vms_have_correct_deps(ctx, domains, depsfile):
+def vms_have_correct_deps(ctx, domains: "list[LibvirtDomain]", depsfile):
     deps_dir = os.path.dirname(depsfile)
     sha256sum = ctx.run(f"cd {deps_dir} && sha256sum {os.path.basename(depsfile)}", warn=True)
     if not sha256sum.ok:

@@ -78,7 +78,7 @@ def print_failed(output):
 
 
 class LibvirtDomain:
-    def __init__(self, ip, domain_id, tag, vmset_tags, ssh_key_path, instance):
+    def __init__(self, ip: str, domain_id, tag, vmset_tags, ssh_key_path, instance: 'HostInstance'):
         self.ip = ip
         self.name = domain_id
         self.tag = tag
