@@ -37,15 +37,19 @@ func (t *FakeResolver) Stop() error {
 
 // Resolve returns the tags for the given id
 func (t *FakeResolver) Resolve(containerID string) []string {
+	fakeTags := []string{
+		"image_tag:latest",
+		"container_id:" + containerID,
+	}
 	t.Lock()
 	defer t.Unlock()
 	for index, id := range t.containerIDs {
 		if id == containerID {
-			return []string{"container_id:" + containerID, fmt.Sprintf("image_name:fake_ubuntu_%d", index+1)}
+			return append(fakeTags, fmt.Sprintf("image_name:fake_ubuntu_%d", index+1))
 		}
 	}
 	t.containerIDs = append(t.containerIDs, containerID)
-	return []string{"container_id:" + containerID, fmt.Sprintf("image_name:fake_ubuntu_%d", len(t.containerIDs))}
+	return append(fakeTags, fmt.Sprintf("image_name:fake_ubuntu_%d", len(t.containerIDs)))
 }
 
 // ResolveWithErr returns the tags for the given id

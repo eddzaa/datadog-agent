@@ -223,9 +223,13 @@ func (p *SecurityProfile) GetState(imageTag string) EventFilteringProfileState {
 	}
 	state := StableEventType
 	for _, et := range p.eventTypes {
-		if pCtx.eventTypeState[et].state == UnstableEventType {
+		s, ok := pCtx.eventTypeState[et]
+		if !ok {
+			continue
+		}
+		if s.state == UnstableEventType {
 			return UnstableEventType
-		} else if pCtx.eventTypeState[et].state != StableEventType {
+		} else if s.state != StableEventType {
 			state = AutoLearning
 		}
 	}
@@ -250,10 +254,13 @@ func (p *SecurityProfile) GetGlobalState() EventFilteringProfileState {
 func (p *SecurityProfile) GetGlobalEventTypeState(et model.EventType) EventFilteringProfileState {
 	globalState := AutoLearning
 	for _, ctx := range p.versionContexts {
-		state := ctx.eventTypeState[et].state
-		if state == UnstableEventType {
+		s, ok := ctx.eventTypeState[et]
+		if !ok {
+			continue
+		}
+		if s.state == UnstableEventType {
 			return UnstableEventType
-		} else if state == StableEventType {
+		} else if s.state == StableEventType {
 			globalState = StableEventType
 		}
 	}
@@ -329,4 +336,15 @@ func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageT
 
 	// finally, merge the trees
 	p.ActivityTree.Merge(newVersion.ActivityTree)
+}
+
+// GetVersionContext returns the context of the givent version if any
+func (p *SecurityProfile) GetVersionContext(imageTag string) *VersionContext {
+	p.versionContextsLock.Lock()
+	defer p.versionContextsLock.Unlock()
+	ctx, found := p.versionContexts[imageTag]
+	if found && ctx != nil {
+		return ctx
+	}
+	return nil
 }

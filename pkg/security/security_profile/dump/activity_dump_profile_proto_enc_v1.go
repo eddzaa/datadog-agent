@@ -20,8 +20,12 @@ func ActivityDumpToSecurityProfileProto(input *ActivityDump) *proto.SecurityProf
 	if input == nil {
 		return nil
 	}
+	selector := input.GetWorkloadSelector()
+	if selector == nil {
+		return nil
+	}
 
-	output := proto.SecurityProfile{
+	output := &proto.SecurityProfile{
 		Metadata:        mtdt.ToProto(&input.Metadata),
 		ProfileContexts: make(map[string]*proto.ProfileContext),
 		Tree:            activity_tree.ToProto(input.ActivityTree),
@@ -31,7 +35,7 @@ func ActivityDumpToSecurityProfileProto(input *ActivityDump) *proto.SecurityProf
 		Tags:     make([]string, len(input.Tags)),
 	}
 	copy(ctx.Tags, input.Tags)
-	output.ProfileContexts[input.selector.Tag] = ctx
+	output.ProfileContexts[selector.Tag] = ctx
 
-	return &output
+	return output
 }

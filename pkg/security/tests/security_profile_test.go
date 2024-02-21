@@ -96,10 +96,7 @@ func TestSecurityProfile(t *testing.T) {
 					t.Errorf("Profile containerID %s != %s\n", sp.Metadata.ContainerID, dump.ContainerID)
 				}
 
-				var ctx *profile.ProfileContext
-				for _, ctx = range sp.profileContexts {
-					break
-				}
+				ctx := sp.GetVersionContext("latest")
 				if ctx == nil {
 					t.Errorf("No profile context found!")
 				} else {

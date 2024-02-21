@@ -323,18 +323,21 @@ func (m *SecurityProfileManager) OnWorkloadSelectorResolvedEvent(workload *cgrou
 		return
 	}
 
+	selector := workload.WorkloadSelector
+	selector.Tag = "*"
+
 	// check if the workload of this selector already exists
-	profile, ok := m.profiles[workload.WorkloadSelector]
+	profile, ok := m.profiles[selector]
 	if !ok {
 		// check the cache
 		m.pendingCacheLock.Lock()
 		defer m.pendingCacheLock.Unlock()
-		profile, ok = m.pendingCache.Get(workload.WorkloadSelector)
+		profile, ok = m.pendingCache.Get(selector)
 		if ok {
 			m.cacheHit.Inc()
 
 			// remove profile from cache
-			_ = m.pendingCache.Remove(workload.WorkloadSelector)
+			_ = m.pendingCache.Remove(selector)
 
 			// since the profile was in cache, it was removed from kernel space, load it now
 			// (locking isn't necessary here, but added as a safeguard)
@@ -348,13 +351,13 @@ func (m *SecurityProfileManager) OnWorkloadSelectorResolvedEvent(workload *cgrou
 			}
 
 			// insert the profile in the list of active profiles
-			m.profiles[workload.WorkloadSelector] = profile
+			m.profiles[selector] = profile
 		} else {
 			m.cacheMiss.Inc()
 
 			// create a new entry
-			profile = NewSecurityProfile(workload.WorkloadSelector, m.eventTypes)
-			m.profiles[workload.WorkloadSelector] = profile
+			profile = NewSecurityProfile(selector, m.eventTypes)
+			m.profiles[selector] = profile
 
 			// notify the providers that we're interested in a new workload selector
 			m.propagateWorkloadSelectorsToProviders()
