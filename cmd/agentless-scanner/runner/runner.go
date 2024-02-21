@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DataDog/datadog-agent/cmd/agentless-scanner/azureutils"
 	"io"
 	"io/fs"
 	"net"
@@ -84,7 +85,8 @@ type Runner struct {
 	findingsReporter *LogReporter
 	rcClient         *client.Client
 
-	waiter awsutils.ResourceWaiter
+	waiter   awsutils.ResourceWaiter
+	azWaiter azureutils.ResourceWaiter
 
 	touchedMu sync.Mutex
 	touched   map[scanRecord]struct{}
@@ -541,11 +543,25 @@ func (s *Runner) launchScan(ctx context.Context, scan *types.ScanTask) (err erro
 		s.scanImage(ctx, scan, mountpoints, pool)
 
 	case types.TaskTypeEBS:
-		if err := awsutils.SetupEBS(ctx, scan, &s.waiter); err != nil {
-			return err
+		switch scan.TargetID.Provider() {
+		case types.CloudProviderAWS:
+			if err := awsutils.SetupEBS(ctx, scan, &s.waiter); err != nil {
+				return err
+			}
+		case types.CloudProviderAzure:
+			cfg, err := azureutils.GetConfigFromCloudID(ctx, scan.TargetID)
+			if err != nil {
+				return err
+			}
+			if err := azureutils.SetupDisk(ctx, cfg, scan, &s.azWaiter); err != nil {
+				return err
+			}
 		}
 		switch scan.DiskMode {
 		case types.DiskModeNoAttach:
+			if scan.TargetID.Provider() != types.CloudProviderAWS {
+				return fmt.Errorf("unsupported attach mode '%q' for cloud provider %q", scan.Type, scan.TargetID.Provider())
+			}
 			s.scanSnaphotNoAttach(ctx, scan, pool)
 		case types.DiskModeNBDAttach, types.DiskModeVolumeAttach:
 			partitions, err := devices.ListPartitions(ctx, scan, *scan.AttachedDeviceName)
@@ -664,10 +680,20 @@ func (s *Runner) cleanupScan(scan *types.ScanTask) {
 	switch scan.Type {
 	case types.TaskTypeEBS, types.TaskTypeAMI:
 		for resourceID, createdAt := range scan.CreatedResources {
-			if err := awsutils.CleanupScanEBS(ctx, scan, resourceID); err != nil {
-				log.Warnf("%s: failed to cleanup EBS resource %q: %v", scan, resourceID, err)
-			} else {
-				s.statsResourceTTL(resourceID.ResourceType(), scan, createdAt)
+			switch resourceID.Provider() {
+			case types.CloudProviderAWS:
+				if err := awsutils.CleanupScanEBS(ctx, scan, resourceID); err != nil {
+					log.Warnf("%s: failed to cleanup EBS resource %q: %v", scan, resourceID, err)
+				} else {
+					s.statsResourceTTL(resourceID.ResourceType(), scan, createdAt)
+				}
+			case types.CloudProviderAzure:
+				cfg, err := azureutils.GetConfigFromCloudID(ctx, resourceID)
+				if err != nil {
+					log.Warnf("%s: failed to get config for resource %q: %v", scan, resourceID, err)
+					continue
+				}
+				azureutils.CleanupScan(ctx, cfg, scan, &s.azWaiter, resourceID)
 			}
 		}
 	case types.TaskTypeLambda, types.TaskTypeHost:

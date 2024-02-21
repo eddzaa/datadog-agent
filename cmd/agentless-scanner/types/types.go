@@ -43,6 +43,9 @@ type ConfigType string
 const (
 	// ConfigTypeAWS is the type of the scan configuration for AWS
 	ConfigTypeAWS ConfigType = "aws-scan"
+
+	// ConfigTypeAzure is the type of the scan configuration for Azure
+	ConfigTypeAzure ConfigType = "azure-scan"
 )
 
 // TaskType is the type of the scan
@@ -139,6 +142,8 @@ func (r RolesMapping) GetRole(accountID string) CloudID {
 	}
 	switch r.provider {
 	case CloudProviderNone:
+		return CloudID{}
+	case CloudProviderAzure:
 		return CloudID{}
 	case CloudProviderAWS:
 		role, err := AWSCloudID("", accountID, ResourceTypeRole, "DatadogAgentlessScannerDelegateRole")
@@ -430,18 +435,26 @@ func ParseTaskType(scanType string) (TaskType, error) {
 // DefaultTaskType returns the default scan type for a resource.
 func DefaultTaskType(resourceID CloudID) (TaskType, error) {
 	resourceType := resourceID.ResourceType()
-	switch resourceType {
-	case ResourceTypeLocalDir:
-		return TaskTypeHost, nil
-	case ResourceTypeSnapshot:
-		return TaskTypeEBS, nil
-	case ResourceTypeVolume:
-		return TaskTypeEBS, nil
-	case ResourceTypeHostImage:
-		return TaskTypeAMI, nil
-	case ResourceTypeFunction:
-		return TaskTypeLambda, nil
+	switch resourceID.provider {
+	case CloudProviderAzure:
+		switch resourceType {
+		case ResourceTypeVolume:
+			return TaskTypeEBS, nil
+		}
+		return "", fmt.Errorf("invalid resource type %q for scanning, expecting %s, %s or %s", resourceType, ResourceTypeLocalDir, ResourceTypeVolume, ResourceTypeSnapshot)
 	default:
+		switch resourceType {
+		case ResourceTypeLocalDir:
+			return TaskTypeHost, nil
+		case ResourceTypeSnapshot:
+			return TaskTypeEBS, nil
+		case ResourceTypeVolume:
+			return TaskTypeEBS, nil
+		case ResourceTypeHostImage:
+			return TaskTypeAMI, nil
+		case ResourceTypeFunction:
+			return TaskTypeLambda, nil
+		}
 		return "", fmt.Errorf("invalid resource type %q for scanning, expecting %s, %s or %s", resourceType, ResourceTypeLocalDir, ResourceTypeVolume, ResourceTypeSnapshot)
 	}
 }
