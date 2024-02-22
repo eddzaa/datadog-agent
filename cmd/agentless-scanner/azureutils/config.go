@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v4"
 	"github.com/DataDog/datadog-agent/cmd/agentless-scanner/types"
+	pkgconfig "github.com/DataDog/datadog-agent/pkg/config"
 	ddogstatsd "github.com/DataDog/datadog-go/v5/statsd"
 	"net/http"
 	"sync"
@@ -56,7 +57,16 @@ func GetConfig(ctx context.Context, subscriptionID string) (Config, error) {
 		statsd, _ = ddogstatsd.New("localhost:8125")
 	}
 
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	clientID := pkgconfig.Datadog.GetString("agentless_scanner.azure_client_id")
+	var cred azcore.TokenCredential
+	var err error
+	if len(clientID) != 0 {
+		cred, err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
+			ID: azidentity.ClientID(clientID),
+		})
+	} else {
+		cred, err = azidentity.NewDefaultAzureCredential(nil)
+	}
 	if err != nil {
 		return Config{}, err
 	}
