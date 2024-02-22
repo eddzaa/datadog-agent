@@ -212,6 +212,9 @@ func initCommonWithServerless(config pkgconfigmodel.Config) {
 	aggregator(config)
 	serializer(config)
 	serverless(config)
+	setupAPM(config)
+	OTLP(config)
+	setupHighAvailability(config)
 }
 
 // InitConfig initializes the config defaults on a config
@@ -1085,10 +1088,7 @@ func InitConfig(config pkgconfigmodel.Config) {
 	// it is also used when refreshing the expiration timestamp of the language
 	config.BindEnvAndSetDefault("language_detection.cleanup.language_ttl", "30m")
 
-	setupAPM(config)
-	OTLP(config)
 	setupProcesses(config)
-	setupHighAvailability(config)
 }
 
 func agent(config pkgconfigmodel.Config) {
