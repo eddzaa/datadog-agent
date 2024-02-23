@@ -117,6 +117,19 @@ def local_vms_in_config(vmconfig):
     return False
 
 
+def get_all_vms_in_stack(stack):
+    with open(f"{get_kmt_os().stacks_dir}/{stack}/{VMCONFIG}", 'r') as f:
+        data = json.load(f)
+
+    vms: list[str] = list()
+
+    for vmset in data["vmsets"]:
+        for kernel in vmset["kernels"]:
+            vms.append(f"{vmset['recipe']}-{kernel['tag']}")
+
+    return vms
+
+
 def ask_for_ssh():
     return (
         ask(

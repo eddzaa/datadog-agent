@@ -437,11 +437,23 @@ def prepare(
     if vms == "":
         raise Exit("No vms specified to sync with")
 
-    if not arch:
-        arch = full_arch("local")
-
     infra = build_infrastructure(stack, ssh_key)
     domains = filter_target_domains(vms, infra)
+
+    if arch is None:
+        archs: set[Arch] = {full_arch(i.arch) for i in infra.values()}
+        if len(archs) > 1:
+            raise Exit("Multiple architectures found. Please specify the architecture to sync with")
+        arch = archs.pop()
+    else:
+        domains_matching_arch: list[LibvirtDomain] = list()
+        for domain in domains:
+            if domain.instance.arch != arch:
+                warn(f"[x] VM {domain} is not of the specified architecture {arch}, ignoring")
+            else:
+                domains_matching_arch.append(domain)
+        domains = domains_matching_arch
+
     paths = KMTPaths(stack, arch)
     cc = get_compiler(ctx, arch)
 
@@ -518,7 +530,7 @@ def build_run_config(run, packages):
 )
 def test(
     ctx,
-    vms,
+    vms=None,
     stack=None,
     packages="",
     run=None,
@@ -534,11 +546,18 @@ def test(
     if not stacks.stack_exists(stack):
         raise Exit(f"Stack {stack} does not exist. Please create with 'inv kmt.stack-create --stack=<name>'")
 
-    if not quick:
-        prepare(ctx, stack=stack, vms=vms, ssh_key=ssh_key, full_rebuild=full_rebuild, packages=packages)
+    if vms is None:
+        vms = ",".join(stacks.get_all_vms_in_stack(stack))
+        info(f"[+] Running tests on all VMs in stack {stack}: vms={vms}")
 
     infra = build_infrastructure(stack, ssh_key)
     domains = filter_target_domains(vms, infra)
+    archs = {full_arch(i.arch) for i in infra.values()}
+
+    if not quick:
+        for arch in archs:
+            prepare(ctx, stack=stack, vms=vms, arch=arch, ssh_key=ssh_key, full_rebuild=full_rebuild, packages=packages)
+
     if run is not None and packages is None:
         raise Exit("Package must be provided when specifying test")
     pkgs = packages.split(",")
@@ -558,6 +577,7 @@ def test(
             "-test-root /opt/system-probe-tests",
         ]
         for d in domains:
+            info(f"[+] Running tests on {d}")
             d.copy(ctx, f"{tmp.name}", "/tmp")
             d.run_cmd(ctx, f"bash /micro-vm-init.sh {' '.join(args)}", verbose=verbose)
 
