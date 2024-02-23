@@ -14,11 +14,6 @@ import (
 	"net/http"
 	"path/filepath"
 
-<<<<<<< HEAD
-=======
-	"github.com/DataDog/datadog-agent/comp/collector/collector"
-	"github.com/DataDog/datadog-agent/comp/core/autodiscovery"
->>>>>>> d8190ec560 (remove global common.AC)
 	flarehelpers "github.com/DataDog/datadog-agent/comp/core/flare/helpers"
 	flaretypes "github.com/DataDog/datadog-agent/comp/core/flare/types"
 	apiv1 "github.com/DataDog/datadog-agent/pkg/clusteragent/api/v1"

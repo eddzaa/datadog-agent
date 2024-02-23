@@ -15,6 +15,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/comp/aggregator/diagnosesendermanager"
 	"github.com/DataDog/datadog-agent/comp/collector/collector"
+	"github.com/DataDog/datadog-agent/comp/core/autodiscovery"
 	"github.com/DataDog/datadog-agent/comp/core/config"
 	"github.com/DataDog/datadog-agent/comp/core/flare/helpers"
 	"github.com/DataDog/datadog-agent/comp/core/flare/types"
@@ -42,6 +43,7 @@ type dependencies struct {
 	Params                Params
 	Providers             []types.FlareCallback `group:"flare"`
 	Collector             optional.Option[collector.Component]
+	ac                    autodiscovery.Component
 }
 
 type flare struct {
@@ -56,7 +58,7 @@ type flare struct {
 func newFlare(deps dependencies) (Component, rcclienttypes.TaskListenerProvider) {
 	// TODO FIX this uninitialize variable.
 	var secretResolver secrets.Component
-	diagnoseDeps := diagnose.NewSuitesDeps(deps.Diagnosesendermanager, deps.Collector, secretResolver)
+	diagnoseDeps := diagnose.NewSuitesDeps(deps.Diagnosesendermanager, deps.Collector, secretResolver, ac)
 	f := &flare{
 		log:          deps.Log,
 		config:       deps.Config,
