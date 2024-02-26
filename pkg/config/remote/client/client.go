@@ -306,6 +306,9 @@ func (c *Client) SetAgentName(agentName string) {
 	}
 }
 
+// Handler is a function that is called when a config update is received.
+type Handler func(update map[string]state.RawConfig, applyStateCallback func(string, state.ApplyStatus))
+
 // Subscribe subscribes to config updates of a product.
 func (c *Client) Subscribe(product string, fn func(update map[string]state.RawConfig, applyStateCallback func(string, state.ApplyStatus))) {
 	c.m.Lock()
