@@ -14,7 +14,7 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/config"
 	"github.com/DataDog/datadog-agent/pkg/util/containers/metrics/provider"
-	"github.com/DataDog/datadog-agent/pkg/util/log"
+	"github.com/DataDog/datadog-agent/pkg/util/containers/originresolution"
 )
 
 type messageType int
@@ -23,7 +23,6 @@ const (
 	metricSampleType messageType = iota
 	serviceCheckType
 	eventType
-	cacheValidity = 2 * time.Second
 )
 
 var (
@@ -36,9 +35,6 @@ var (
 
 	// containerIDFieldPrefix is the prefix for a common field holding the sender's container ID
 	containerIDFieldPrefix = []byte("c:")
-
-	// containerInodeFieldPrefix is the prefix for a notation holding the sender's container Inode in the containerIDField
-	containerIDFieldInodePrefix = []byte("in-")
 )
 
 // parser parses dogstatsd messages
@@ -193,7 +189,7 @@ func (p *parser) parseMetricSample(message []byte) (dogstatsdMetricSample, error
 			timestamp = time.Unix(ts, 0)
 		// container ID
 		case p.dsdOriginEnabled && bytes.HasPrefix(optionalField, containerIDFieldPrefix):
-			containerID = p.extractContainerID(optionalField)
+			containerID = originresolution.ResolveOrigin(optionalField)
 		}
 	}
 
@@ -245,30 +241,6 @@ func (p *parser) parseFloat64List(rawFloats []byte) ([]float64, error) {
 		return nil, fmt.Errorf("no value found")
 	}
 	return values, nil
-}
-
-// extractContainerID parses the value of the container ID field.
-// If the field is prefixed by `in-`, it corresponds to the cgroup controller's inode of the source
-// and is used for ContainerID resolution.
-func (p *parser) extractContainerID(rawContainerIDField []byte) []byte {
-	containerIDField := rawContainerIDField[len(containerIDFieldPrefix):]
-
-	if bytes.HasPrefix(containerIDField[:len(containerIDFieldInodePrefix)], containerIDFieldInodePrefix) {
-		inodeField, err := strconv.ParseUint(string(containerIDField[len(containerIDFieldPrefix)+1:]), 10, 64)
-		if err != nil {
-			log.Debugf("Failed to parse inode from %s, got %v", containerIDField, err)
-			return nil
-		}
-
-		containerID, err := p.provider.GetMetaCollector().GetContainerIDForInode(inodeField, cacheValidity)
-		if err != nil {
-			log.Debugf("Failed to get container ID, got %v", err)
-			return nil
-		}
-		return []byte(containerID)
-	}
-
-	return containerIDField
 }
 
 // the std API does not have methods to do []byte => float parsing
