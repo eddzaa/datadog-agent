@@ -61,7 +61,7 @@ func CompleteFlare(fb flaretypes.FlareBuilder, invAgent inventoryagent.Component
 		fb.AddFile("status.log", []byte("unable to get the status of the agent, is it running?"))
 		fb.AddFile("config-check.log", []byte("unable to get loaded checks config, is the agent running?"))
 	} else {
-		fb.AddFileFromFunc("status.log", func() ([]byte, error) { return status.GetAndFormatStatus(invAgent) })
+		fb.AddFileFromFunc("status.log", func() ([]byte, error) { return status.GetAndFormatStatus(invAgent, ac) })
 		fb.AddFileFromFunc("config-check.log", getConfigCheck)
 		fb.AddFileFromFunc("tagger-list.json", getAgentTaggerList)
 		fb.AddFileFromFunc("workload-list.log", getAgentWorkloadList)
