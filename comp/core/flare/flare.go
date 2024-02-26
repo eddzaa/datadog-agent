@@ -43,7 +43,7 @@ type dependencies struct {
 	Params                Params
 	Providers             []types.FlareCallback `group:"flare"`
 	Collector             optional.Option[collector.Component]
-	ac                    autodiscovery.Component
+	AC                    optional.Option[autodiscovery.Component]
 }
 
 type flare struct {

@@ -19,18 +19,30 @@ import (
 var linuxKernelSymbols = getLinuxKernelSymbols
 
 // CreateSecurityAgentArchive packages up the files
+<<<<<<< HEAD
 func CreateSecurityAgentArchive(local bool, logFilePath string, statusComponent status.Component) (string, error) {
+=======
+func CreateSecurityAgentArchive(local bool, logFilePath string, runtimeStatus, complianceStatus map[string]interface{}) (string, error) {
+>>>>>>> 6477db95e2 (fix linter)
 	fb, err := flarehelpers.NewFlareBuilder(local)
 	if err != nil {
 		return "", err
 	}
+<<<<<<< HEAD
 	createSecurityAgentArchive(fb, logFilePath, statusComponent)
+=======
+	createSecurityAgentArchive(fb, logFilePath, runtimeStatus, complianceStatus)
+>>>>>>> 6477db95e2 (fix linter)
 
 	return fb.Save()
 }
 
 // createSecurityAgentArchive packages up the files
+<<<<<<< HEAD
 func createSecurityAgentArchive(fb flaretypes.FlareBuilder, logFilePath string, statusComponent status.Component) {
+=======
+func createSecurityAgentArchive(fb flaretypes.FlareBuilder, logFilePath string, runtimeStatus, complianceStatus map[string]interface{}) {
+>>>>>>> 6477db95e2 (fix linter)
 	// If the request against the API does not go through we don't collect the status log.
 	if fb.IsLocal() {
 		fb.AddFile("local", []byte(""))
@@ -38,7 +50,11 @@ func createSecurityAgentArchive(fb flaretypes.FlareBuilder, logFilePath string, 
 		// The Status will be unavailable unless the agent is running.
 		// Only zip it up if the agent is running
 		err := fb.AddFileFromFunc("security-agent-status.log", func() ([]byte, error) {
+<<<<<<< HEAD
 			return statusComponent.GetStatus("text", false)
+=======
+			return status.GetAndFormatSecurityAgentStatus(runtimeStatus, complianceStatus)
+>>>>>>> 6477db95e2 (fix linter)
 		})
 		if err != nil {
 			log.Infof("Error getting the status of the Security Agent, %q", err)
