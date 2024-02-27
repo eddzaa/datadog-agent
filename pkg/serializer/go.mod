@@ -13,6 +13,7 @@ replace (
 	github.com/DataDog/datadog-agent/comp/forwarder/defaultforwarder => ../../comp/forwarder/defaultforwarder
 	github.com/DataDog/datadog-agent/comp/forwarder/orchestrator/orchestratorinterface => ../../comp/forwarder/orchestrator/orchestratorinterface
 	github.com/DataDog/datadog-agent/pkg/aggregator/ckey => ../aggregator/ckey
+	github.com/DataDog/datadog-agent/pkg/api => ../api/
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults => ../collector/check/defaults
 	github.com/DataDog/datadog-agent/pkg/config/env => ../config/env
 	github.com/DataDog/datadog-agent/pkg/config/logs => ../config/logs/
@@ -83,7 +84,7 @@ require (
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/comp/core/status v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/comp/core/telemetry v0.52.0-rc.3 // indirect
-	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/utils v0.52.0-rc.3 // indirect
@@ -94,7 +95,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/common v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
-	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel // indirect
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/fxutil v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/http v0.52.0-rc.3 // indirect
@@ -176,3 +177,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace pkg/api => ../api

@@ -8,11 +8,13 @@ replace (
 	github.com/DataDog/datadog-agent/comp/core/flare/types => ../flare/types
 	github.com/DataDog/datadog-agent/comp/core/secrets => ../secrets
 	github.com/DataDog/datadog-agent/comp/core/telemetry => ../telemetry/
+	github.com/DataDog/datadog-agent/pkg/api => ../../../pkg/api
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults => ../../../pkg/collector/check/defaults
 	github.com/DataDog/datadog-agent/pkg/config/env => ../../../pkg/config/env
 	github.com/DataDog/datadog-agent/pkg/config/logs => ../../../pkg/config/logs
 	github.com/DataDog/datadog-agent/pkg/config/model => ../../../pkg/config/model
 	github.com/DataDog/datadog-agent/pkg/config/setup => ../../../pkg/config/setup
+	github.com/DataDog/datadog-agent/pkg/config/utils => ../../../pkg/config/utils
 	github.com/DataDog/datadog-agent/pkg/obfuscate => ../../../pkg/obfuscate
 	github.com/DataDog/datadog-agent/pkg/proto => ../../../pkg/proto
 	github.com/DataDog/datadog-agent/pkg/remoteconfig/state => ../../../pkg/remoteconfig/state
@@ -31,6 +33,7 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/util/system/socket => ../../../pkg/util/system/socket
 	github.com/DataDog/datadog-agent/pkg/util/testutil => ../../../pkg/util/testutil
 	github.com/DataDog/datadog-agent/pkg/util/winutil => ../../../pkg/util/winutil
+	github.com/DataDog/datadog-agent/pkg/version => ../../../pkg/version
 )
 
 require (
@@ -47,7 +50,7 @@ require (
 
 require (
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3 // indirect
-	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/model v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/setup v0.52.0-rc.3 // indirect
@@ -57,7 +60,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/remoteconfig/state v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
-	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel // indirect
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/optional v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/pointer v0.52.0-rc.3 // indirect

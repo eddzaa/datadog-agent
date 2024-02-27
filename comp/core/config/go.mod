@@ -7,10 +7,12 @@ replace (
 	github.com/DataDog/datadog-agent/comp/core/flare/types => ../flare/types
 	github.com/DataDog/datadog-agent/comp/core/secrets => ../secrets/
 	github.com/DataDog/datadog-agent/comp/core/telemetry => ../telemetry/
+	github.com/DataDog/datadog-agent/pkg/api => ../../../pkg/api
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults => ../../../pkg/collector/check/defaults
 	github.com/DataDog/datadog-agent/pkg/config/env => ../../../pkg/config/env
 	github.com/DataDog/datadog-agent/pkg/config/model => ../../../pkg/config/model/
 	github.com/DataDog/datadog-agent/pkg/config/setup => ../../../pkg/config/setup
+	github.com/DataDog/datadog-agent/pkg/config/utils => ../../../pkg/config/utils/
 	github.com/DataDog/datadog-agent/pkg/telemetry => ../../../pkg/telemetry
 	github.com/DataDog/datadog-agent/pkg/util/executable => ../../../pkg/util/executable
 	github.com/DataDog/datadog-agent/pkg/util/filesystem => ../../../pkg/util/filesystem
@@ -25,16 +27,17 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/util/system/socket => ../../../pkg/util/system/socket
 	github.com/DataDog/datadog-agent/pkg/util/testutil => ../../../pkg/util/testutil
 	github.com/DataDog/datadog-agent/pkg/util/winutil => ../../../pkg/util/winutil
+	github.com/DataDog/datadog-agent/pkg/version => ../../../pkg/version
 )
 
 require (
 	github.com/DataDog/datadog-agent/cmd/agent/common/path v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3
-	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/config/model v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/config/setup v0.52.0-rc.3
-	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/fxutil v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/log v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/winutil v0.52.0-rc.3

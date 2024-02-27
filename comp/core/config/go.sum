@@ -1,12 +1,6 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel h1:QLEuHnv3vuKL+SKdTKmx/EgWUMOLKTRT3Vwd4jmdhy8=
-github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel/go.mod h1:X/JW5UsOd1B7Li0E5ecI3wmlwhvyVN7sjJeZibY5T5M=
-github.com/DataDog/datadog-agent/pkg/config/utils v0.52.0-rc.3 h1:x4L9hDauORlN3DnGbkVwAinhvJhIeh4LG7+wskLP6a8=
-github.com/DataDog/datadog-agent/pkg/config/utils v0.52.0-rc.3/go.mod h1:LbvHfnBghjhgFNOBqS8vJFBr9CD09ggOZ6zP0O6R4+A=
-github.com/DataDog/datadog-agent/pkg/version v0.52.0-rc.3 h1:eneG70bVQ2Rj/7aRuA+tS4ZbbsJhaUQJ/+VKCaJeu0E=
-github.com/DataDog/datadog-agent/pkg/version v0.52.0-rc.3/go.mod h1:GZeu662YYuY3HAG8tnThsvkIbD/98lFW9Szv7hCr//E=
 github.com/DataDog/viper v1.12.0 h1:FufyZpZPxyszafSV5B8Q8it75IhhuJwH0T7QpT6HnD0=
 github.com/DataDog/viper v1.12.0/go.mod h1:wDdUVJ2SHaMaPrCZrlRCObwkubsX8j5sme3LaR/SGTc=
 github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migciow=

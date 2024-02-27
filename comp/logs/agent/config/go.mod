@@ -8,6 +8,7 @@ replace (
 	github.com/DataDog/datadog-agent/comp/core/flare/types => ../../../../comp/core/flare/types
 	github.com/DataDog/datadog-agent/comp/core/secrets => ../../../../comp/core/secrets
 	github.com/DataDog/datadog-agent/comp/core/telemetry => ../../../core/telemetry/
+	github.com/DataDog/datadog-agent/pkg/api => ../../../../pkg/api
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults => ../../../../pkg/collector/check/defaults
 	github.com/DataDog/datadog-agent/pkg/config/env => ../../../../pkg/config/env/
 	github.com/DataDog/datadog-agent/pkg/config/model => ../../../../pkg/config/model/
@@ -45,12 +46,12 @@ require (
 
 require (
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3 // indirect
-	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
-	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel // indirect
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/optional v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/scrubber v0.52.0-rc.3 // indirect
@@ -95,3 +96,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace pkg/api => ../../../../pkg/api

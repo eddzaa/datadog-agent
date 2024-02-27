@@ -614,7 +614,7 @@ require (
 	github.com/DataDog/datadog-agent/comp/logs/agent/config v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/comp/otelcol/otlp/components/exporter/serializerexporter v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/aggregator/ckey v0.52.0-rc.3
-	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/config/logs v0.52.0-rc.3
@@ -638,7 +638,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/compression v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3
-	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/fxutil v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/grpc v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3
