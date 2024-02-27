@@ -6,13 +6,19 @@
 package config
 
 import (
+	"context"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
+
+	"go.uber.org/fx"
 
 	"github.com/DataDog/datadog-agent/comp/core/secrets"
 	pkgconfigmodel "github.com/DataDog/datadog-agent/pkg/config/model"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
-	"go.uber.org/fx"
+	"github.com/DataDog/datadog-agent/pkg/util/flavor"
 )
 
 // Reader is a subset of Config that only allows reading of configuration
@@ -90,6 +96,22 @@ func newConfig(deps dependencies) (Component, error) {
 		if err := pkgconfigsetup.Merge(deps.Params.securityAgentConfigFilePaths, config); err != nil {
 			return returnErrFct(err)
 		}
+	}
+
+	configRefreshInterval := config.GetDuration("agent_ipc.config_refresh_interval")
+	agentIPCPort := config.GetInt("agent_ipc.port")
+	if flavor.GetFlavor() != flavor.DefaultAgent &&
+		agentIPCPort > 0 &&
+		configRefreshInterval > 0 {
+
+		agentIPCHost := config.GetString("agent_ipc.host")
+		url := &url.URL{
+			Scheme: "https",
+			Host:   net.JoinHostPort(agentIPCHost, strconv.Itoa(agentIPCPort)),
+			Path:   "/config/v1/",
+		}
+		//TODO: use an actual context
+		go syncConfigWithCoreAgent(context.TODO(), config, url, configRefreshInterval)
 	}
 
 	return &cfg{Config: config, warnings: warnings}, nil

@@ -35,6 +35,7 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/util/compression => ../util/compression
 	github.com/DataDog/datadog-agent/pkg/util/executable => ../util/executable/
 	github.com/DataDog/datadog-agent/pkg/util/filesystem => ../util/filesystem/
+	github.com/DataDog/datadog-agent/pkg/util/flavor => ../util/flavor
 	github.com/DataDog/datadog-agent/pkg/util/fxutil => ../util/fxutil/
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate => ../util/hostname/validate
 	github.com/DataDog/datadog-agent/pkg/util/http => ../util/http
@@ -82,6 +83,7 @@ require (
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/comp/core/status v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/comp/core/telemetry v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/utils v0.52.0-rc.3 // indirect
@@ -92,6 +94,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/common v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/util/fxutil v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/http v0.52.0-rc.3 // indirect

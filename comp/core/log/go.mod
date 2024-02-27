@@ -20,6 +20,7 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/trace => ../../../pkg/trace
 	github.com/DataDog/datadog-agent/pkg/util/executable => ../../../pkg/util/executable
 	github.com/DataDog/datadog-agent/pkg/util/filesystem => ../../../pkg/util/filesystem/
+	github.com/DataDog/datadog-agent/pkg/util/flavor => ../../../pkg/util/flavor
 	github.com/DataDog/datadog-agent/pkg/util/fxutil => ../../../pkg/util/fxutil
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate => ../../../pkg/util/hostname/validate
 	github.com/DataDog/datadog-agent/pkg/util/log => ../../../pkg/util/log
@@ -46,14 +47,17 @@ require (
 
 require (
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/model v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/setup v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/config/utils v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/obfuscate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/proto v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/remoteconfig/state v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/optional v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/pointer v0.52.0-rc.3 // indirect
@@ -61,6 +65,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/system v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/system/socket v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/winutil v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/version v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-go/v5 v5.1.1 // indirect
 	github.com/DataDog/go-sqllexer v0.0.9 // indirect
 	github.com/DataDog/go-tuf v1.0.2-0.5.2 // indirect

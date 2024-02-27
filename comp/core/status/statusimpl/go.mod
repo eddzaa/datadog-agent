@@ -34,7 +34,7 @@ require (
 	github.com/DataDog/datadog-agent/comp/core/config v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/comp/core/status v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/config/setup v0.52.0-rc.3
-	github.com/DataDog/datadog-agent/pkg/util/flavor v0.52.0-rc.3
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel
 	github.com/DataDog/datadog-agent/pkg/util/fxutil v0.52.0-rc.3
 	github.com/DataDog/datadog-agent/pkg/version v0.52.0-rc.3
 	github.com/stretchr/testify v1.8.4
@@ -44,9 +44,11 @@ require (
 
 require (
 	github.com/DataDog/datadog-agent/comp/core/secrets v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/model v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/config/utils v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect

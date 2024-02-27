@@ -36,6 +36,7 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/util/compression => ../../../../../../pkg/util/compression/
 	github.com/DataDog/datadog-agent/pkg/util/executable => ../../../../../../pkg/util/executable/
 	github.com/DataDog/datadog-agent/pkg/util/filesystem => ../../../../../../pkg/util/filesystem/
+	github.com/DataDog/datadog-agent/pkg/util/flavor => ../../../../../../pkg/util/flavor
 	github.com/DataDog/datadog-agent/pkg/util/fxutil => ../../../../../../pkg/util/fxutil/
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate => ../../../../../../pkg/util/hostname/validate/
 	github.com/DataDog/datadog-agent/pkg/util/http => ../../../../../../pkg/util/http/
@@ -50,7 +51,6 @@ replace (
 	github.com/DataDog/datadog-agent/pkg/util/testutil => ../../../../../../pkg/util/testutil/
 	github.com/DataDog/datadog-agent/pkg/util/winutil => ../../../../../../pkg/util/winutil/
 	github.com/DataDog/datadog-agent/pkg/version => ../../../../../../pkg/version
-
 )
 
 require (
@@ -91,6 +91,7 @@ require (
 	github.com/DataDog/datadog-agent/comp/forwarder/defaultforwarder v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/comp/forwarder/orchestrator/orchestratorinterface v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/aggregator/ckey v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/api v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/collector/check/defaults v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/env v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/config/model v0.52.0-rc.3 // indirect
@@ -106,6 +107,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/util/compression v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/executable v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/filesystem v0.52.0-rc.3 // indirect
+	github.com/DataDog/datadog-agent/pkg/util/flavor v0.53.0-devel // indirect
 	github.com/DataDog/datadog-agent/pkg/util/fxutil v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/hostname/validate v0.52.0-rc.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/util/http v0.52.0-rc.3 // indirect
