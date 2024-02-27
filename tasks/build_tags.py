@@ -102,6 +102,9 @@ CLUSTER_AGENT_CLOUDFOUNDRY_TAGS = {"clusterchecks"}
 # DOGSTATSD_TAGS lists the tags needed when building dogstatsd
 DOGSTATSD_TAGS = {"containerd", "docker", "kubelet", "podman", "zlib"}
 
+# AGENTLESS_SCANNER_TAGS lists the tags needed when building the agentless-scanner
+AGENTLESS_SCANNER_TAGS = {""}
+
 # IOT_AGENT_TAGS lists the tags needed when building the IoT agent
 IOT_AGENT_TAGS = {"jetson", "otlp", "systemd", "zlib"}
 
@@ -193,6 +196,12 @@ build_tags = {
         "system-tests": AGENT_TAGS,
         "lint": DOGSTATSD_TAGS.union(UNIT_TEST_TAGS),
         "unit-tests": DOGSTATSD_TAGS.union(UNIT_TEST_TAGS),
+    },
+    AgentFlavor.agentless_scanner: {
+        "dogstatsd": AGENTLESS_SCANNER_TAGS,
+        "system-tests": AGENT_TAGS,
+        "lint": AGENTLESS_SCANNER_TAGS.union(UNIT_TEST_TAGS),
+        "unit-tests": AGENTLESS_SCANNER_TAGS.union(UNIT_TEST_TAGS),
     },
 }
 

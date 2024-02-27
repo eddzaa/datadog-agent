@@ -34,6 +34,8 @@ const (
 	DefaultUpdaterLogFile = "/var/log/datadog/updater.log"
 	// DefaultSecurityAgentLogFile points to the log file that will be used by the security-agent if not configured
 	DefaultSecurityAgentLogFile = "/var/log/datadog/security-agent.log"
+	// DefaultAgentlessScannerLogFile points to the log file that will be used by the agentless-scanner if not configured
+	DefaultAgentlessScannerLogFile = "/var/log/datadog/agentless-scanner.log"
 	// DefaultProcessAgentLogFile is the default process-agent log file
 	DefaultProcessAgentLogFile = "/var/log/datadog/process-agent.log"
 	// defaultSystemProbeLogFilePath is the default system-probe log file

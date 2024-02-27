@@ -22,6 +22,8 @@ var (
 	DefaultUpdaterLogFile = "c:\\programdata\\datadog\\logs\\updater.log"
 	// DefaultSecurityAgentLogFile points to the log file that will be used by the security-agent if not configured
 	DefaultSecurityAgentLogFile = "c:\\programdata\\datadog\\logs\\security-agent.log"
+	// DefaultAgentlessScannerLogFile points to the log file that will be used by the agentless-scanner if not configured
+	DefaultAgentlessScannerLogFile = "c:\\programdata\\datadog\\logs\\agentless-scanner.log"
 	// DefaultProcessAgentLogFile is the default process-agent log file
 	DefaultProcessAgentLogFile = "C:\\ProgramData\\Datadog\\logs\\process-agent.log"
 
