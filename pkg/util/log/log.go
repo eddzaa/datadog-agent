@@ -449,12 +449,20 @@ func formatErrorc(message string, context ...interface{}) error {
 // scrubAndLogFunc, and treating the variadic args as the message.
 func log(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string), v ...interface{}) {
 	l := logger.Load()
-	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
+
+	if l == nil {
+		addLogToBuffer(bufferFunc)
+		return
+	}
+
+	l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
+	defer l.l.Unlock()
+
+	if l.inner != nil && l.shouldLog(logLevel) {
 		s := BuildLogEntry(v...)
-		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
-		defer l.l.Unlock()
+
 		scrubAndLogFunc(s)
-	} else if l == nil || l.inner == nil {
+	} else if l.inner == nil {
 		addLogToBuffer(bufferFunc)
 	}
 }
@@ -528,7 +536,7 @@ func logContext(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc fun
 	}
 }
 
-//// Inverse tree logic, lock and unlock are on 2 lowest level, we have to talk if we want to reverse it
+// // Inverse tree logic, lock and unlock are on 2 lowest level, we have to talk if we want to reverse it
 func logContextWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string) error, message string, fallbackStderr bool, depth int, context ...interface{}) error {
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
@@ -850,7 +858,7 @@ func ReplaceLogger(li seelog.LoggerInterface) seelog.LoggerInterface {
 	}
 
 	l.l.Lock()
-    defer l.l.Unlock()
+	defer l.l.Unlock()
 	if l.inner == nil {
 		return nil // Return nil if logger.inner is not initialized
 	}
