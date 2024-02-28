@@ -61,7 +61,7 @@ type DatadogLogger struct {
 
 // SetupLogger setup agent wide logger
 func SetupLogger(i seelog.LoggerInterface, level string) {
-	logger.Store(setupCommonLogger(i, level))
+	logger.Store(setupCommonLogger(i, level)) //// We may want to lock before since the function access to the logger ?
 
 	// Flush the log entries logged before initialization now that the logger is initialized
 	bufferMutex.Lock()
@@ -74,7 +74,7 @@ func SetupLogger(i seelog.LoggerInterface, level string) {
 
 // SetupJMXLogger setup JMXfetch specific logger
 func SetupJMXLogger(i seelog.LoggerInterface, level string) {
-	jmxLogger.Store(setupCommonLogger(i, level))
+	jmxLogger.Store(setupCommonLogger(i, level)) //// We may want to lock before since the function access to the logger ?
 }
 
 func setupCommonLogger(i seelog.LoggerInterface, level string) *DatadogLogger {
@@ -116,9 +116,8 @@ func (sw *DatadogLogger) replaceInnerLogger(l seelog.LoggerInterface) seelog.Log
 	return old
 }
 
+// The logger is lock in an upper function see ChangeLogLevel
 func (sw *DatadogLogger) changeLogLevel(level string) error {
-	sw.l.Lock()
-	defer sw.l.Unlock()
 
 	lvl, ok := seelog.LogLevelFromString(strings.ToLower(level))
 	if !ok {
@@ -452,7 +451,7 @@ func log(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(strin
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
 		s := BuildLogEntry(v...)
-		l.l.Lock()
+		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
 		defer l.l.Unlock()
 		scrubAndLogFunc(s)
 	} else if l == nil || l.inner == nil {
@@ -464,7 +463,7 @@ func logWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc f
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
 		s := BuildLogEntry(v...)
-		l.l.Lock()
+		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
 		defer l.l.Unlock()
 		return scrubAndLogFunc(s)
 	} else if l == nil || l.inner == nil {
@@ -485,7 +484,7 @@ func logWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc f
 func logFormat(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string, ...interface{}), format string, params ...interface{}) {
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
-		l.l.Lock()
+		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
 		defer l.l.Unlock()
 		scrubAndLogFunc(format, params...)
 	} else if l == nil || l.inner == nil {
@@ -496,7 +495,7 @@ func logFormat(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func
 func logFormatWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string, ...interface{}) error, format string, fallbackStderr bool, params ...interface{}) error {
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
-		l.l.Lock()
+		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
 		defer l.l.Unlock()
 		return scrubAndLogFunc(format, params...)
 	} else if l == nil || l.inner == nil {
@@ -517,7 +516,7 @@ func logFormatWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLog
 func logContext(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string), message string, depth int, context ...interface{}) {
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
-		l.l.Lock()
+		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
 		defer l.l.Unlock()
 		l.inner.SetContext(context)
 		l.inner.SetAdditionalStackDepth(defaultStackDepth + depth) //nolint:errcheck
@@ -529,10 +528,11 @@ func logContext(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc fun
 	}
 }
 
+//// Inverse tree logic, lock and unlock are on 2 lowest level, we have to talk if we want to reverse it
 func logContextWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string) error, message string, fallbackStderr bool, depth int, context ...interface{}) error {
 	l := logger.Load()
 	if l != nil && l.inner != nil && l.shouldLog(logLevel) {
-		l.l.Lock()
+		l.l.Lock() //// If we change the logic here we will want to change in addLogToBuffer too
 		defer l.l.Unlock()
 		l.inner.SetContext(context)
 		l.inner.SetAdditionalStackDepth(defaultStackDepth + depth) //nolint:errcheck
