@@ -9,6 +9,11 @@ SERVICE_NAME=datadog-agent
 
 set -e
 
+if grep -q "CentOS.*6\..*" /etc/redhat-release 2>/dev/null; then
+    echo "[ ERROR ]\tCannot install package on CentOS 6."
+    exit 1
+fi
+
 if [ -f "/lib/systemd/system/$SERVICE_NAME.service" ] || [ -f "/usr/lib/systemd/system/$SERVICE_NAME.service" ]; then
     # Stop an already running agent
     # Only supports systemd and upstart
