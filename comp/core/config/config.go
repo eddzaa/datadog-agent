@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"strings"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -95,13 +96,14 @@ func newConfig(deps dependencies) (Component, error) {
 		}
 	}
 
-	configRefreshInterval := config.GetDuration("agent_ipc.config_refresh_interval")
+	configRefreshIntervalSec := config.GetInt("agent_ipc.config_refresh_interval")
 	agentIPCPort := config.GetInt("agent_ipc.port")
 	if flavor.GetFlavor() != flavor.DefaultAgent &&
 		agentIPCPort > 0 &&
-		configRefreshInterval > 0 {
+		configRefreshIntervalSec > 0 {
 
 		agentIPCHost := config.GetString("agent_ipc.host")
+		configRefreshInterval := time.Duration(configRefreshIntervalSec) * time.Second
 		//TODO: use an actual context
 		go syncConfigWithCoreAgent(context.TODO(), config, agentIPCHost, agentIPCPort, configRefreshInterval)
 	}
