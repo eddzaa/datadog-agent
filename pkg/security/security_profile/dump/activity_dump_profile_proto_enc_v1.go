@@ -30,9 +30,12 @@ func ActivityDumpToSecurityProfileProto(input *ActivityDump) *proto.SecurityProf
 		ProfileContexts: make(map[string]*proto.ProfileContext),
 		Tree:            activity_tree.ToProto(input.ActivityTree),
 	}
+	ts := uint64(input.Metadata.Start.UnixNano())
 	ctx := &proto.ProfileContext{
-		Syscalls: input.ActivityTree.ComputeSyscallsList(),
-		Tags:     make([]string, len(input.Tags)),
+		Syscalls:  input.ActivityTree.ComputeSyscallsList(),
+		Tags:      make([]string, len(input.Tags)),
+		FirstSeen: ts,
+		LastSeen:  ts,
 	}
 	copy(ctx.Tags, input.Tags)
 	output.ProfileContexts[selector.Tag] = ctx

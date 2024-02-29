@@ -9,6 +9,7 @@
 package profile
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -83,7 +84,7 @@ func NewSecurityProfile(selector cgroupModel.WorkloadSelector, eventTypes []mode
 		eventTypes:      eventTypes,
 		versionContexts: make(map[string]*VersionContext),
 	}
-	if selector.Tag != "" {
+	if selector.Tag != "" && selector.Tag != "*" {
 		sp.versionContexts[selector.Tag] = &VersionContext{
 			eventTypeState: make(map[model.EventType]*EventTypeState),
 		}
@@ -338,13 +339,77 @@ func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageT
 	p.ActivityTree.Merge(newVersion.ActivityTree)
 }
 
-// GetVersionContext returns the context of the givent version if any
-func (p *SecurityProfile) GetVersionContext(imageTag string) *VersionContext {
+func (p *SecurityProfile) getTimeOrderedVersionContexts() []*VersionContext {
+	var orderedVersions []*VersionContext
+
+	for _, version := range p.versionContexts {
+		orderedVersions = append(orderedVersions, version)
+	}
+	slices.SortFunc(orderedVersions, func(a, b *VersionContext) int {
+		if a.firstSeenNano == b.firstSeenNano {
+			return 0
+		} else if a.firstSeenNano < b.firstSeenNano {
+			return -1
+		}
+		return 1
+	})
+	return orderedVersions
+}
+
+// GetVersionContextIndex returns the context of the givent version if any
+func (p *SecurityProfile) GetVersionContextIndex(index int) *VersionContext {
 	p.versionContextsLock.Lock()
 	defer p.versionContextsLock.Unlock()
+
+	orderedVersions := p.getTimeOrderedVersionContexts()
+	if index >= len(orderedVersions) {
+		return nil
+	}
+	return orderedVersions[index]
+}
+
+// ListAllVersionStates is a debug function to list all version and their states
+func (p *SecurityProfile) ListAllVersionStates() {
+	p.versionContextsLock.Lock()
+	orderedVersions := p.getTimeOrderedVersionContexts()
+	p.versionContextsLock.Unlock()
+
+	versions := ""
+	for version, _ := range p.versionContexts {
+		versions += version + " "
+	}
+	fmt.Printf("Versions: %s\n", versions)
+
+	fmt.Printf("Global state: %s\n", p.GetGlobalState().toTag())
+	for i, version := range orderedVersions {
+		fmt.Printf("Version %d:\n", i)
+		fmt.Printf("  - Tags: %+v\n", version.Tags)
+		fmt.Printf("  - First seen: %v\n", time.Unix(0, int64(version.firstSeenNano)))
+		fmt.Printf("  - Last seen: %v\n", time.Unix(0, int64(version.lastSeenNano)))
+		fmt.Printf("  - Event types:\n")
+		for et, ets := range version.eventTypeState {
+			fmt.Printf("    . %s: %+v\n", et, ets.state.toTag())
+		}
+	}
+	fmt.Printf("Instances:\n")
+	for _, instance := range p.Instances {
+		fmt.Printf("  - %+v\n", instance.ID)
+	}
+}
+
+// SetVersionState force a state for a given version (debug purpose only)
+func (p *SecurityProfile) SetVersionState(imageTag string, state EventFilteringProfileState) error {
+	p.versionContextsLock.Lock()
+	defer p.versionContextsLock.Unlock()
+
 	ctx, found := p.versionContexts[imageTag]
-	if found && ctx != nil {
-		return ctx
+	if !found {
+		return errors.New("profile version not found")
+	}
+	for _, et := range p.eventTypes {
+		if eventState, ok := ctx.eventTypeState[et]; ok {
+			eventState.state = state
+		}
 	}
 	return nil
 }

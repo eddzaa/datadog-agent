@@ -707,7 +707,7 @@ func newTestModule(t testing.TB, macroDefs []*rules.MacroDefinition, ruleDefs []
 	if opts.staticOpts.tagsResolver != nil {
 		emopts.ProbeOpts.TagsResolver = opts.staticOpts.tagsResolver
 	} else {
-		emopts.ProbeOpts.TagsResolver = NewFakeResolver()
+		emopts.ProbeOpts.TagsResolver = NewFakeResolverDifferentImageNames()
 	}
 	testMod.eventMonitor, err = eventmonitor.NewEventMonitor(emconfig, secconfig, emopts)
 	if err != nil {
@@ -1226,21 +1226,29 @@ func (tm *testModule) StartADocker() (*dockerCmdWrapper, error) {
 	return docker, nil
 }
 
+func (tm *testModule) GetDumpFromDocker(dockerInstance *dockerCmdWrapper) (*activityDumpIdentifier, error) {
+	dumps, err := tm.ListActivityDumps()
+	if err != nil {
+		_, _ = dockerInstance.stop()
+		return nil, err
+	}
+	dump := findLearningContainerID(dumps, dockerInstance.containerID)
+	if dump == nil {
+		_, _ = dockerInstance.stop()
+		return nil, errors.New("ContainerID not found on activity dump list")
+	}
+	return dump, nil
+}
+
 func (tm *testModule) StartADockerGetDump() (*dockerCmdWrapper, *activityDumpIdentifier, error) {
 	dockerInstance, err := tm.StartADocker()
 	if err != nil {
 		return nil, nil, err
 	}
 	time.Sleep(1 * time.Second) // a quick sleep to let events to be added to the dump
-	dumps, err := tm.ListActivityDumps()
+	dump, err := tm.GetDumpFromDocker(dockerInstance)
 	if err != nil {
-		_, _ = dockerInstance.stop()
 		return nil, nil, err
-	}
-	dump := findLearningContainerID(dumps, dockerInstance.containerID)
-	if dump == nil {
-		_, _ = dockerInstance.stop()
-		return nil, nil, errors.New("ContainerID not found on activity dump list")
 	}
 	return dockerInstance, dump, nil
 }
@@ -1635,4 +1643,50 @@ func removeFakePasswd() error {
 
 func removeFakeGroup() error {
 	return os.Remove(fakeGroupPath)
+}
+
+func (tm *testModule) ListAllProfiles() {
+	p, ok := tm.probe.PlatformProbe.(*sprobe.EBPFProbe)
+	if !ok {
+		return
+	}
+
+	m := p.GetProfileManagers()
+	if m == nil {
+		return
+	}
+
+	spm := m.GetSecurityProfileManager()
+	if spm == nil {
+		return
+	}
+	spm.ListAllProfileStates()
+}
+
+func (tm *testModule) SetProfileVersionState(selector *cgroupModel.WorkloadSelector, imageTag string, state profile.EventFilteringProfileState) error {
+	p, ok := tm.probe.PlatformProbe.(*sprobe.EBPFProbe)
+	if !ok {
+		return errors.New("no ebpf probe")
+	}
+
+	m := p.GetProfileManagers()
+	if m == nil {
+		return errors.New("no profile managers")
+	}
+
+	spm := m.GetSecurityProfileManager()
+	if spm == nil {
+		return errors.New("no security profile managers")
+	}
+
+	profile := spm.GetProfile(*selector)
+	if profile == nil {
+		return errors.New("no profile")
+	}
+
+	err := profile.SetVersionState(imageTag, state)
+	if err != nil {
+		return err
+	}
+	return nil
 }

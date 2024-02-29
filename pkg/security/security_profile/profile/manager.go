@@ -741,7 +741,6 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	if len(event.ContainerContext.Tags) == 0 {
 		return
 	}
-
 	selector, err := cgroupModel.NewWorkloadSelector(utils.GetTagValue("image_name", event.ContainerContext.Tags), "*")
 	if err != nil {
 		return
@@ -751,6 +750,9 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	profile := m.GetProfile(selector)
 	if profile == nil || profile.ActivityTree == nil {
 		m.incrementEventFilteringStat(event.GetEventType(), NoProfile, NA)
+		return
+	}
+	if !profile.IsEventTypeValid(event.GetEventType()) {
 		return
 	}
 
@@ -770,6 +772,10 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	} else {
 		// create a new version
 		profile.prepareNewVersion(imageTag, event.ContainerContext.Tags, m.config.RuntimeSecurity.SecurityProfileMaxImageTags)
+		ctx, found = profile.versionContexts[imageTag]
+		if !found { // should never happen
+			return
+		}
 	}
 	profile.versionContextsLock.Unlock()
 
@@ -780,7 +786,10 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 		return
 	}
 
-	profileState := m.tryAutolearn(profile, event, imageTag)
+	profileState := m.tryAutolearn(profile, ctx, event, imageTag)
+	if profileState != NoProfile {
+		ctx.eventTypeState[event.GetEventType()].state = profileState
+	}
 	switch profileState {
 	case NoProfile, ProfileAtMaxSize, UnstableEventType:
 		// an error occurred or we are in unstable state
@@ -797,7 +806,7 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 		// and if this is not an exec event, check if we can benefit of the occasion to add missing processes
 		insertMissingProcesses := false
 		if event.GetEventType() != model.ExecEventType {
-			if execState := m.getEventTypeState(profile, event, model.ExecEventType, imageTag); execState == AutoLearning || execState == WorkloadWarmup {
+			if execState := m.getEventTypeState(profile, ctx, event, model.ExecEventType, imageTag); execState == AutoLearning || execState == WorkloadWarmup {
 				insertMissingProcesses = true
 			}
 		}
@@ -821,8 +830,8 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 }
 
 // tryAutolearn tries to autolearn the input event. It returns the profile state: stable, unstable, autolearning or workloadwarmup
-func (m *SecurityProfileManager) tryAutolearn(profile *SecurityProfile, event *model.Event, imageTag string) EventFilteringProfileState {
-	profileState := m.getEventTypeState(profile, event, event.GetEventType(), imageTag)
+func (m *SecurityProfileManager) tryAutolearn(profile *SecurityProfile, ctx *VersionContext, event *model.Event, imageTag string) EventFilteringProfileState {
+	profileState := m.getEventTypeState(profile, ctx, event, event.GetEventType(), imageTag)
 	var nodeType activity_tree.NodeGenerationType
 	if profileState == AutoLearning {
 		nodeType = activity_tree.ProfileDrift
@@ -839,7 +848,7 @@ func (m *SecurityProfileManager) tryAutolearn(profile *SecurityProfile, event *m
 	insertMissingProcesses := false
 	if event.GetEventType() == model.ExecEventType {
 		insertMissingProcesses = true
-	} else if execState := m.getEventTypeState(profile, event, model.ExecEventType, imageTag); execState == AutoLearning || execState == WorkloadWarmup {
+	} else if execState := m.getEventTypeState(profile, ctx, event, model.ExecEventType, imageTag); execState == AutoLearning || execState == WorkloadWarmup {
 		insertMissingProcesses = true
 	}
 
@@ -848,13 +857,9 @@ func (m *SecurityProfileManager) tryAutolearn(profile *SecurityProfile, event *m
 		m.incrementEventFilteringStat(event.GetEventType(), NoProfile, NA)
 		return NoProfile
 	} else if newEntry {
-		profile.versionContextsLock.Lock()
-		defer profile.versionContextsLock.Unlock()
-		if ctx, ok := profile.versionContexts[imageTag]; ok {
-			eventState, ok := ctx.eventTypeState[event.GetEventType()]
-			if ok { // should always be the case
-				eventState.lastAnomalyNano = event.TimestampRaw
-			}
+		eventState, ok := ctx.eventTypeState[event.GetEventType()]
+		if ok { // should always be the case
+			eventState.lastAnomalyNano = event.TimestampRaw
 		}
 
 		// if a previous version of this profile was stable for this event type,
@@ -962,18 +967,12 @@ func (m *SecurityProfileManager) FetchSilentWorkloads() map[cgroupModel.Workload
 	return out
 }
 
-func (m *SecurityProfileManager) getEventTypeState(profile *SecurityProfile, event *model.Event, eventType model.EventType, imageTag string) EventFilteringProfileState {
-	profile.versionContextsLock.Lock()
-	defer profile.versionContextsLock.Unlock()
-	pctx, ok := profile.versionContexts[imageTag]
-	if !ok { // should never happen
-		return UnstableEventType
-	}
+func (m *SecurityProfileManager) getEventTypeState(profile *SecurityProfile, pctx *VersionContext, event *model.Event, eventType model.EventType, imageTag string) EventFilteringProfileState {
 	eventState, ok := pctx.eventTypeState[event.GetEventType()]
 	if !ok {
 		eventState = &EventTypeState{
 			lastAnomalyNano: profile.loadedNano,
-			state:           NoProfile,
+			state:           AutoLearning,
 		}
 		pctx.eventTypeState[eventType] = eventState
 	} else if eventState.state == UnstableEventType {
@@ -1050,4 +1049,15 @@ func (m *SecurityProfileManager) AddNewTagVersion(baseVersion *SecurityProfile, 
 	activity_tree.ProtoDecodeActivityTree(newProfileVersion.ActivityTree, newVersion.Tree)
 	// merge the trees
 	baseVersion.mergeNewVersion(newProfileVersion, m.config.RuntimeSecurity.SecurityProfileMaxImageTags)
+}
+
+func (m *SecurityProfileManager) ListAllProfileStates() {
+	m.profilesLock.Lock()
+	defer m.profilesLock.Unlock()
+	for selector, profile := range m.profiles {
+		if len(profile.versionContexts) > 0 {
+			fmt.Printf("### Profile: %+v\n", selector)
+			profile.ListAllVersionStates()
+		}
+	}
 }
