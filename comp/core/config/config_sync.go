@@ -21,6 +21,9 @@ import (
 // syncConfigWithCoreAgent fetches the config from the core agent and updates the local config
 func syncConfigWithCoreAgent(ctx context.Context, config pkgconfigmodel.ReaderWriter, url *url.URL, refreshInterval time.Duration) {
 	ticker := time.NewTicker(refreshInterval)
+	// whether we managed to contact the core-agent, used to avoid spamming logs
+	connected := true
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -29,8 +32,16 @@ func syncConfigWithCoreAgent(ctx context.Context, config pkgconfigmodel.ReaderWr
 		case <-ticker.C:
 			data, err := apiutils.DoGetWithContext(ctx, http.DefaultClient, url.String(), apiutils.LeaveConnectionOpen)
 			if err != nil {
-				log.Warnf("Failed to fetch config from core agent: %v", err)
+				if connected {
+					log.Warnf("Failed to fetch config from core agent: %v", err)
+					connected = false
+				}
 				continue
+			}
+
+			if !connected {
+				log.Debug("Succeeded to fetch config from core agent")
+				connected = true
 			}
 
 			var configs map[string]interface{}
