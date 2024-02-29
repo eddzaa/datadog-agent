@@ -7,10 +7,7 @@ package config
 
 import (
 	"context"
-	"net"
-	"net/url"
 	"os"
-	"strconv"
 	"strings"
 
 	"go.uber.org/fx"
@@ -105,13 +102,8 @@ func newConfig(deps dependencies) (Component, error) {
 		configRefreshInterval > 0 {
 
 		agentIPCHost := config.GetString("agent_ipc.host")
-		url := &url.URL{
-			Scheme: "https",
-			Host:   net.JoinHostPort(agentIPCHost, strconv.Itoa(agentIPCPort)),
-			Path:   "/config/v1/",
-		}
 		//TODO: use an actual context
-		go syncConfigWithCoreAgent(context.TODO(), config, url, configRefreshInterval)
+		go syncConfigWithCoreAgent(context.TODO(), config, agentIPCHost, agentIPCPort, configRefreshInterval)
 	}
 
 	return &cfg{Config: config, warnings: warnings}, nil

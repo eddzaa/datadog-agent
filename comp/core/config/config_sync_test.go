@@ -42,10 +42,10 @@ func TestSyncConfigWithCoreAgent(t *testing.T) {
 	sleepInterval := 2 * refreshInterval
 
 	url := &url.URL{
-		Scheme: "http",
+		Scheme: "http", // use http to avoid TLS setup
 		Host:   server.Listener.Addr().String(),
 	}
-	go syncConfigWithCoreAgent(ctx, configRemote, url, refreshInterval)
+	go syncConfigWithWithURL(ctx, configRemote, url, refreshInterval)
 
 	time.Sleep(sleepInterval)
 	require.Equal(t, "api_key_core1", configRemote.GetString("api_key"))

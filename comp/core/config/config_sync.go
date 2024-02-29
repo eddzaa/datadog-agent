@@ -8,9 +8,11 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
+	"strconv"
 	"time"
 
 	apiutils "github.com/DataDog/datadog-agent/pkg/api/util"
@@ -18,8 +20,17 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
+func syncConfigWithCoreAgent(ctx context.Context, config pkgconfigmodel.ReaderWriter, host string, port int, refreshInterval time.Duration) {
+	url := &url.URL{
+		Scheme: "https",
+		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+		Path:   "/config/v1",
+	}
+	syncConfigWithWithURL(ctx, config, url, refreshInterval)
+}
+
 // syncConfigWithCoreAgent fetches the config from the core agent and updates the local config
-func syncConfigWithCoreAgent(ctx context.Context, config pkgconfigmodel.ReaderWriter, url *url.URL, refreshInterval time.Duration) {
+func syncConfigWithWithURL(ctx context.Context, config pkgconfigmodel.ReaderWriter, url *url.URL, refreshInterval time.Duration) {
 	ticker := time.NewTicker(refreshInterval)
 	// whether we managed to contact the core-agent, used to avoid spamming logs
 	connected := true
