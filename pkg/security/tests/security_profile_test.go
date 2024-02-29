@@ -1004,7 +1004,6 @@ func TestSecurityProfileLifeCycleExecs(t *testing.T) {
 	}
 	defer dockerInstanceV1.stop()
 
-	time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 	cmd := dockerInstanceV1.Command(syscallTester, []string{"sleep", "1"}, []string{})
 	_, err = cmd.CombinedOutput()
 	if err != nil {
@@ -1106,4 +1105,167 @@ func TestSecurityProfileLifeCycleExecs(t *testing.T) {
 			return false
 		}, time.Second*2, model.ExecEventType)
 	})
+}
+
+func TestSecurityProfileLifeCycleDNS(t *testing.T) {
+	SkipIfNotAvailable(t)
+
+	// skip test that are about to be run on docker (to avoid trying spawning docker in docker)
+	if testEnvironment == DockerEnvironment {
+		t.Skip("Skip test spawning docker containers on docker")
+	}
+	if _, err := whichNonFatal("docker"); err != nil {
+		t.Skip("Skip test where docker is unavailable")
+	}
+	if !IsDedicatedNodeForAD() {
+		t.Skip("Skip test when not run in dedicated env")
+	}
+
+	var expectedFormats = []string{"profile"}
+	var testActivityDumpTracedEventTypes = []string{"exec", "dns"}
+
+	outputDir := t.TempDir()
+	os.MkdirAll(outputDir, 0755)
+	defer os.RemoveAll(outputDir)
+
+	fakeManualResolver := NewFakeManualResolver()
+
+	test, err := newTestModule(t, nil, []*rules.RuleDefinition{}, withStaticOpts(testOpts{
+		enableActivityDump:                      true,
+		activityDumpRateLimiter:                 200,
+		activityDumpTracedCgroupsCount:          10,
+		activityDumpDuration:                    testActivityDumpDuration,
+		activityDumpLocalStorageDirectory:       outputDir,
+		activityDumpLocalStorageCompression:     false,
+		activityDumpLocalStorageFormats:         expectedFormats,
+		activityDumpTracedEventTypes:            testActivityDumpTracedEventTypes,
+		enableSecurityProfile:                   true,
+		securityProfileDir:                      outputDir,
+		securityProfileWatchDir:                 true,
+		enableAnomalyDetection:                  true,
+		anomalyDetectionEventTypes:              testActivityDumpTracedEventTypes,
+		anomalyDetectionMinimumStablePeriodExec: 10 * time.Second,
+		anomalyDetectionMinimumStablePeriodDNS:  10 * time.Second,
+		anomalyDetectionWarmupPeriod:            1 * time.Second,
+		tagsResolver:                            fakeManualResolver,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer test.Close()
+	syscallTester, err := loadSyscallTester(t, test, "syscall_tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dockerInstanceV1, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV1.stop()
+
+	cmd := dockerInstanceV1.Command(syscallTester, []string{"sleep", "1"}, []string{})
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1 * time.Second) // a quick sleep to let events to be added to the dump
+
+	err = test.StopActivityDump("", dockerInstanceV1.containerID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(6 * time.Second) // a quick sleep to let the profile to be loaded (5sec debounce + 1sec spare)
+
+	// HERE: V1 is learning
+
+	t.Run("life-cycle-v1-learning-new-dns", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("nslookup", []string{"google.fr"}, []string{})
+			_, err = cmd.CombinedOutput()
+			return err
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			t.Fatal(errors.New("catch a custom event that should had been reinserted"))
+			return false
+		}, time.Second*2, model.DNSEventType)
+	})
+
+	time.Sleep(time.Second * 10) // waiting for the stable period
+
+	// HERE: V1 is stable
+
+	t.Run("life-cycle-v1-stable-dns-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("nslookup", []string{"google.com"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*3, model.DNSEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	selector := fakeManualResolver.GetContainerSelector(dockerInstanceV1.containerID)
+	fakeManualResolver.SpecifyNextSelector(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   selector.Tag + "+",
+	})
+	dockerInstanceV2, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV2.stop()
+
+	// HERE: V1 is stable and V2 is learning
+
+	t.Run("life-cycle-v2-learning-new-dns-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV2.Command("nslookup", []string{"google.es"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*3, model.DNSEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("life-cycle-v2-learning-v1-dns", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV2.Command("nslookup", []string{"google.fr"}, []string{})
+			_, err = cmd.CombinedOutput()
+			return err
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			t.Fatal(errors.New("catch a custom event that should had been reinserted"))
+			return false
+		}, time.Second*2, model.DNSEventType)
+	})
+
+	if err := test.SetProfileVersionState(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   "*",
+	}, selector.Tag, profile.UnstableEventType); err != nil {
+		t.Fatal(err)
+	}
+
+	// HERE: V1 is unstable and V2 is learning
+
+	t.Run("life-cycle-v1-unstable-new-dns", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("nslookup", []string{"google.co.uk"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			t.Fatal(errors.New("catch a custom event that should had been reinserted"))
+			return false
+		}, time.Second*2, model.DNSEventType)
+	})
+
+	// test.ListAllProfiles()
+
 }

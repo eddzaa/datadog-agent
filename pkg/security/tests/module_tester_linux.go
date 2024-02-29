@@ -1223,6 +1223,7 @@ func (tm *testModule) StartADocker() (*dockerCmdWrapper, error) {
 		return nil, err
 	}
 
+	time.Sleep(1 * time.Second) // a quick sleep to ensure the dump has started
 	return docker, nil
 }
 
@@ -1245,7 +1246,6 @@ func (tm *testModule) StartADockerGetDump() (*dockerCmdWrapper, *activityDumpIde
 	if err != nil {
 		return nil, nil, err
 	}
-	time.Sleep(1 * time.Second) // a quick sleep to let events to be added to the dump
 	dump, err := tm.GetDumpFromDocker(dockerInstance)
 	if err != nil {
 		return nil, nil, err
