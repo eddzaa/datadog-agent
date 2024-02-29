@@ -464,10 +464,11 @@ func log(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(strin
 func logWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string) error, fallbackStderr bool, v ...interface{}) error {
 	l := logger.Load()
 
-	err := formatError(v...)
+
 
 	if l == nil {
 		addLogToBuffer(bufferFunc)
+		err := formatError(v...)
 		if fallbackStderr && (l == nil) {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", logLevel.String(), err.Error())
 		}
@@ -484,7 +485,7 @@ func logWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc f
 		addLogToBuffer(bufferFunc)
 	}
 
-
+	err := formatError(v...)
 	// Originally (PR 6436) fallbackStderr check had been added to handle a small window
 	// where error messages had been lost before Logger had been initialized. Adjusting
 	// just for that case because if the error log should not be logged - because it has
@@ -516,10 +517,9 @@ func logFormat(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func
 func logFormatWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string, ...interface{}) error, format string, fallbackStderr bool, params ...interface{}) error {
 	l := logger.Load()
 
-	err := formatErrorf(format, params...)
-
 	if l == nil {
 		addLogToBuffer(bufferFunc)
+		err := formatErrorf(format, params...)
 		if fallbackStderr {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", logLevel.String(), err.Error())
 		}
@@ -535,7 +535,7 @@ func logFormatWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLog
 		addLogToBuffer(bufferFunc)
 	}
 
-
+	err := formatErrorf(format, params...)
 	// Originally (PR 6436) fallbackStderr check had been added to handle a small window
 	// where error messages had been lost before Logger had been initialized. Adjusting
 	// just for that case because if the error log should not be logged - because it has
@@ -571,10 +571,11 @@ func logContext(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc fun
 func logContextWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLogFunc func(string) error, message string, fallbackStderr bool, depth int, context ...interface{}) error {
 	l := logger.Load()
 
-	err := formatErrorc(message, context...)
+
 
 	if l == nil {
 		addLogToBuffer(bufferFunc)
+		err := formatErrorc(message, context...)
 		if fallbackStderr {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", logLevel.String(), err.Error())
 		}
@@ -595,6 +596,7 @@ func logContextWithError(logLevel seelog.LogLevel, bufferFunc func(), scrubAndLo
 		addLogToBuffer(bufferFunc)
 	}
 
+	err := formatErrorc(message, context...)
 	if fallbackStderr {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", logLevel.String(), err.Error())
 	}
