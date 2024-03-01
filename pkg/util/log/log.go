@@ -128,6 +128,7 @@ func (sw *DatadogLogger) changeLogLevel(level string) error {
 }
 
 func (sw *DatadogLogger) shouldLog(level seelog.LogLevel) bool {
+	// TODO: Refacto code
 	// sw.l.RLock()
 	// shouldLog := level >= sw.level
 	// sw.l.RUnlock()
@@ -158,7 +159,7 @@ func (sw *DatadogLogger) scrub(s string) string {
 
 // trace logs at the trace level, called with sw.l held
 func (sw *loggerPointer) trace(s string) {
-	l := sw.Load()
+	l := sw.Load() // TODO: Refacto code -> Check if logger load well
 	scrubbed := l.scrub(s)
 	l.inner.Trace(scrubbed)
 
@@ -170,8 +171,10 @@ func (sw *loggerPointer) trace(s string) {
 // trace logs at the trace level and the current stack depth plus the
 // additional given one, called with sw.l held
 func (sw *loggerPointer) traceStackDepth(s string, depth int) {
-	l := sw.Load()
+	l := sw.Load() // TODO: Refacto code -> Check if logger load well
 	scrubbed := l.scrub(s)
+
+	// TODO: We may want to lock before since the function access to the logger
 	l.inner.SetAdditionalStackDepth(defaultStackDepth + depth) //nolint:errcheck
 	l.inner.Trace(scrubbed)
 	l.inner.SetAdditionalStackDepth(defaultStackDepth) //nolint:errcheck
@@ -183,8 +186,10 @@ func (sw *loggerPointer) traceStackDepth(s string, depth int) {
 
 // debug logs at the debug level, called with sw.l held
 func (sw *loggerPointer) debug(s string) {
-	l := sw.Load()
+	l := sw.Load() // TODO: Refacto code -> Check if logger load well
 	scrubbed := l.scrub(s)
+	// TODO: We may want to lock before since the function access to the logger
+	// IT's a bit weird to call Exported function from here, TODO: Check debug functions' structure with lock and unlock
 	l.inner.Debug(scrubbed)
 
 	for _, l := range l.extra {
@@ -194,7 +199,7 @@ func (sw *loggerPointer) debug(s string) {
 
 // debug logs at the debug level and the current stack depth plus the additional given one, called with sw.l held
 func (sw *loggerPointer) debugStackDepth(s string, depth int) {
-	l := sw.Load()
+	l := sw.Load() 
 	scrubbed := l.scrub(s)
 	l.inner.SetAdditionalStackDepth(defaultStackDepth + depth) //nolint:errcheck
 	l.inner.Debug(scrubbed)
@@ -617,7 +622,7 @@ func TracefStackDepth(depth int, format string, params ...interface{}) {
 	}
 	msg := fmt.Sprintf(format, params...)
 	log(seelog.TraceLvl, func() { TraceStackDepth(depth, msg) }, func(s string) {
-		logger.traceStackDepth(s, depth)
+		logger.traceStackDepth(s, depth) // TODO: Check if logger is locked here
 	}, msg)
 }
 
@@ -851,7 +856,7 @@ func DebugStackDepth(depth int, v ...interface{}) {
 // TraceStackDepth logs at the trace level and the current stack depth plus the additional given one and returns an error containing the formated log message
 func TraceStackDepth(depth int, v ...interface{}) {
 	log(seelog.TraceLvl, func() { TraceStackDepth(depth, v...) }, func(s string) {
-		logger.traceStackDepth(s, depth)
+		logger.traceStackDepth(s, depth) // TODO: Check if logger is locked here
 	}, v...)
 }
 
