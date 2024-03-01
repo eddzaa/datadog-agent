@@ -8,6 +8,8 @@
 package selftests
 
 import (
+	"time"
+
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/DataDog/datadog-agent/pkg/security/config"
@@ -30,8 +32,8 @@ func NewSelfTester(_ *config.RuntimeSecurityConfig, probe *probe.Probe) (*SelfTe
 }
 
 // RunSelfTest runs the self test and return the result
-func (t *SelfTester) RunSelfTest() ([]string, []string, map[string]*serializers.EventSerializer, error) {
-	return nil, nil, nil, nil
+func (t *SelfTester) RunSelfTest() error {
+	return nil
 }
 
 // Start starts the self tester policy provider
@@ -57,4 +59,8 @@ func (t *SelfTester) LoadPolicies(_ []rules.MacroFilter, _ []rules.RuleFilter) (
 // IsExpectedEvent sends an event to the tester
 func (t *SelfTester) IsExpectedEvent(_ *rules.Rule, _ eval.Event, _ *probe.Probe) bool {
 	return false
+}
+
+// WaitForResult wait for self test results
+func (t *SelfTester) WaitForResult(timeout time.Duration, cb func(success []eval.RuleID, fails []eval.RuleID, events map[eval.RuleID]*serializers.EventSerializer)) {
 }

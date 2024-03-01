@@ -29,26 +29,26 @@ const (
 // SelfTestEvent is used to report a self test result
 type SelfTestEvent struct {
 	events.CustomEventCommonFields
-	Success    []string                                `json:"succeeded_tests"`
-	Fails      []string                                `json:"failed_tests"`
-	TestEvents map[string]*serializers.EventSerializer `json:"test_events"`
+	Success    []eval.RuleID                                `json:"succeeded_tests"`
+	Fails      []eval.RuleID                                `json:"failed_tests"`
+	TestEvents map[eval.RuleID]*serializers.EventSerializer `json:"test_events"`
 }
 
 // ToJSON marshal using json format
 func (t SelfTestEvent) ToJSON() ([]byte, error) {
 	// cleanup the serialization of potentially nil slices
 	if t.Success == nil {
-		t.Success = []string{}
+		t.Success = []eval.RuleID{}
 	}
 	if t.Fails == nil {
-		t.Fails = []string{}
+		t.Fails = []eval.RuleID{}
 	}
 
 	return json.Marshal(t)
 }
 
 // NewSelfTestEvent returns the rule and the result of the self test
-func NewSelfTestEvent(success []string, fails []string, testEvents map[string]*serializers.EventSerializer) (*rules.Rule, *events.CustomEvent) {
+func NewSelfTestEvent(success []eval.RuleID, fails []eval.RuleID, testEvents map[eval.RuleID]*serializers.EventSerializer) (*rules.Rule, *events.CustomEvent) {
 	evt := SelfTestEvent{
 		Success:    success,
 		Fails:      fails,
