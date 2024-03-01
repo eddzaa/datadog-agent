@@ -199,7 +199,7 @@ func (sw *loggerPointer) debug(s string) {
 
 // debug logs at the debug level and the current stack depth plus the additional given one, called with sw.l held
 func (sw *loggerPointer) debugStackDepth(s string, depth int) {
-	l := sw.Load() 
+	l := sw.Load()
 	scrubbed := l.scrub(s)
 	l.inner.SetAdditionalStackDepth(defaultStackDepth + depth) //nolint:errcheck
 	l.inner.Debug(scrubbed)
