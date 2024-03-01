@@ -41,6 +41,7 @@ type configDependencies interface {
 
 type dependencies struct {
 	fx.In
+	Lc fx.Lifecycle
 
 	Params Params
 	// secrets Component is optional, if not provided, the config will not decrypt secrets
@@ -102,10 +103,19 @@ func newConfig(deps dependencies) (Component, error) {
 		agentIPCPort > 0 &&
 		configRefreshIntervalSec > 0 {
 
-		agentIPCHost := config.GetString("agent_ipc.host")
-		configRefreshInterval := time.Duration(configRefreshIntervalSec) * time.Second
-		//TODO: use an actual context
-		go syncConfigWithCoreAgent(context.TODO(), config, agentIPCHost, agentIPCPort, configRefreshInterval)
+		ctx, cancel := context.WithCancel(context.Background())
+		deps.Lc.Append(fx.Hook{
+			OnStart: func(context.Context) error {
+				agentIPCHost := config.GetString("agent_ipc.host")
+				configRefreshInterval := time.Duration(configRefreshIntervalSec) * time.Second
+				go syncConfigWithCoreAgent(ctx, config, agentIPCHost, agentIPCPort, configRefreshInterval)
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				cancel()
+				return nil
+			},
+		})
 	}
 
 	return &cfg{Config: config, warnings: warnings}, nil
