@@ -1030,7 +1030,13 @@ func TestSecurityProfileLifeCycleExecs(t *testing.T) {
 		}, time.Second*2, model.ExecEventType)
 	})
 
-	time.Sleep(time.Second * 10) // waiting for the stable period
+	selector := fakeManualResolver.GetContainerSelector(dockerInstanceV1.containerID)
+	if err := test.SetProfileVersionState(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   "*",
+	}, selector.Tag, profile.StableEventType); err != nil {
+		t.Fatal(err)
+	}
 
 	// HERE: V1 is stable
 
@@ -1048,7 +1054,6 @@ func TestSecurityProfileLifeCycleExecs(t *testing.T) {
 		}
 	})
 
-	selector := fakeManualResolver.GetContainerSelector(dockerInstanceV1.containerID)
 	fakeManualResolver.SpecifyNextSelector(&cgroupModel.WorkloadSelector{
 		Image: selector.Image,
 		Tag:   selector.Tag + "+",
@@ -1265,7 +1270,368 @@ func TestSecurityProfileLifeCycleDNS(t *testing.T) {
 			return false
 		}, time.Second*2, model.DNSEventType)
 	})
+}
 
-	// test.ListAllProfiles()
+func TestSecurityProfileLifeCycleEvictitonProcess(t *testing.T) {
+	SkipIfNotAvailable(t)
 
+	// skip test that are about to be run on docker (to avoid trying spawning docker in docker)
+	if testEnvironment == DockerEnvironment {
+		t.Skip("Skip test spawning docker containers on docker")
+	}
+	if _, err := whichNonFatal("docker"); err != nil {
+		t.Skip("Skip test where docker is unavailable")
+	}
+	if !IsDedicatedNodeForAD() {
+		t.Skip("Skip test when not run in dedicated env")
+	}
+
+	var expectedFormats = []string{"profile"}
+	var testActivityDumpTracedEventTypes = []string{"exec", "dns"}
+
+	outputDir := t.TempDir()
+	os.MkdirAll(outputDir, 0755)
+	defer os.RemoveAll(outputDir)
+
+	fakeManualResolver := NewFakeManualResolver()
+
+	test, err := newTestModule(t, nil, []*rules.RuleDefinition{}, withStaticOpts(testOpts{
+		enableActivityDump:                      true,
+		activityDumpRateLimiter:                 200,
+		activityDumpTracedCgroupsCount:          10,
+		activityDumpDuration:                    testActivityDumpDuration,
+		activityDumpLocalStorageDirectory:       outputDir,
+		activityDumpLocalStorageCompression:     false,
+		activityDumpLocalStorageFormats:         expectedFormats,
+		activityDumpTracedEventTypes:            testActivityDumpTracedEventTypes,
+		enableSecurityProfile:                   true,
+		securityProfileDir:                      outputDir,
+		securityProfileWatchDir:                 true,
+		enableAnomalyDetection:                  true,
+		anomalyDetectionEventTypes:              testActivityDumpTracedEventTypes,
+		anomalyDetectionMinimumStablePeriodExec: 10 * time.Second,
+		anomalyDetectionMinimumStablePeriodDNS:  10 * time.Second,
+		anomalyDetectionWarmupPeriod:            1 * time.Second,
+		tagsResolver:                            fakeManualResolver,
+		securityProfileMaxImageTags:             2,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer test.Close()
+	syscallTester, err := loadSyscallTester(t, test, "syscall_tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dockerInstanceV1, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV1.stop()
+
+	cmd := dockerInstanceV1.Command(syscallTester, []string{"sleep", "1"}, []string{})
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1 * time.Second) // a quick sleep to let events to be added to the dump
+
+	err = test.StopActivityDump("", dockerInstanceV1.containerID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(6 * time.Second) // a quick sleep to let the profile to be loaded (5sec debounce + 1sec spare)
+
+	// HERE: V1 is learning
+
+	t.Run("life-cycle-eviction-process-v1-learning-new-process", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("getconf", []string{"-a"}, []string{})
+			_, err = cmd.CombinedOutput()
+			return err
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			t.Fatal(errors.New("catch a custom event that should had been reinserted"))
+			return false
+		}, time.Second*2, model.ExecEventType)
+	})
+
+	selector := fakeManualResolver.GetContainerSelector(dockerInstanceV1.containerID)
+	if err := test.SetProfileVersionState(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   "*",
+	}, selector.Tag, profile.StableEventType); err != nil {
+		t.Fatal(err)
+	}
+
+	// HERE: V1 is stable
+
+	t.Run("life-cycle-eviction-process-v1-stable-process-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("getent", []string{}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*2, model.ExecEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	fakeManualResolver.SpecifyNextSelector(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   selector.Tag + "v2",
+	})
+	dockerInstanceV2, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV2.stop()
+
+	// HERE: V1 is stable and V2 is learning
+
+	t.Run("life-cycle-eviction-process-v2-learning-new-process-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV2.Command("iconv", []string{"-l"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*2, model.ExecEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	fakeManualResolver.SpecifyNextSelector(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   selector.Tag + "v3",
+	})
+	dockerInstanceV3, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV3.stop()
+
+	// HERE: V1 is deleted, V2 is learning and V3 is learning
+
+	t.Run("life-cycle-eviction-process-check-v1-evicted", func(t *testing.T) {
+
+		versions, err := test.GetProfileVersions(selector.Image)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, 2, len(versions))
+		assert.True(t, slices.Contains(versions, selector.Tag+"v2"))
+		assert.True(t, slices.Contains(versions, selector.Tag+"v3"))
+		assert.False(t, slices.Contains(versions, selector.Tag))
+	})
+
+	if err := test.SetProfileVersionState(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   "*",
+	}, selector.Tag+"v3", profile.StableEventType); err != nil {
+		t.Fatal(err)
+	}
+
+	// HERE: V1 is deleted, V2 is learning and V3 is stable
+
+	t.Run("life-cycle-eviction-process-v1-process-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV3.Command("getconf", []string{"-a"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*2, model.ExecEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestSecurityProfileLifeCycleEvictitonDNS(t *testing.T) {
+	SkipIfNotAvailable(t)
+
+	// skip test that are about to be run on docker (to avoid trying spawning docker in docker)
+	if testEnvironment == DockerEnvironment {
+		t.Skip("Skip test spawning docker containers on docker")
+	}
+	if _, err := whichNonFatal("docker"); err != nil {
+		t.Skip("Skip test where docker is unavailable")
+	}
+	if !IsDedicatedNodeForAD() {
+		t.Skip("Skip test when not run in dedicated env")
+	}
+
+	var expectedFormats = []string{"profile"}
+	var testActivityDumpTracedEventTypes = []string{"exec", "dns"}
+
+	outputDir := t.TempDir()
+	os.MkdirAll(outputDir, 0755)
+	defer os.RemoveAll(outputDir)
+
+	fakeManualResolver := NewFakeManualResolver()
+
+	test, err := newTestModule(t, nil, []*rules.RuleDefinition{}, withStaticOpts(testOpts{
+		enableActivityDump:                      true,
+		activityDumpRateLimiter:                 200,
+		activityDumpTracedCgroupsCount:          10,
+		activityDumpDuration:                    testActivityDumpDuration,
+		activityDumpLocalStorageDirectory:       outputDir,
+		activityDumpLocalStorageCompression:     false,
+		activityDumpLocalStorageFormats:         expectedFormats,
+		activityDumpTracedEventTypes:            testActivityDumpTracedEventTypes,
+		enableSecurityProfile:                   true,
+		securityProfileDir:                      outputDir,
+		securityProfileWatchDir:                 true,
+		enableAnomalyDetection:                  true,
+		anomalyDetectionEventTypes:              testActivityDumpTracedEventTypes,
+		anomalyDetectionMinimumStablePeriodExec: 10 * time.Second,
+		anomalyDetectionMinimumStablePeriodDNS:  10 * time.Second,
+		anomalyDetectionWarmupPeriod:            1 * time.Second,
+		tagsResolver:                            fakeManualResolver,
+		securityProfileMaxImageTags:             2,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer test.Close()
+	syscallTester, err := loadSyscallTester(t, test, "syscall_tester")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dockerInstanceV1, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV1.stop()
+
+	cmd := dockerInstanceV1.Command(syscallTester, []string{"sleep", "1"}, []string{})
+	_, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1 * time.Second) // a quick sleep to let events to be added to the dump
+
+	err = test.StopActivityDump("", dockerInstanceV1.containerID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(6 * time.Second) // a quick sleep to let the profile to be loaded (5sec debounce + 1sec spare)
+
+	// HERE: V1 is learning
+
+	t.Run("life-cycle-eviction-dns-v1-learning-new-process", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("nslookup", []string{"google.fr"}, []string{})
+			_, err = cmd.CombinedOutput()
+			return err
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			t.Fatal(errors.New("catch a custom event that should had been reinserted"))
+			return false
+		}, time.Second*2, model.DNSEventType)
+	})
+
+	selector := fakeManualResolver.GetContainerSelector(dockerInstanceV1.containerID)
+	if err := test.SetProfileVersionState(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   "*",
+	}, selector.Tag, profile.StableEventType); err != nil {
+		t.Fatal(err)
+	}
+
+	// HERE: V1 is stable
+
+	t.Run("life-cycle-eviction-dns-v1-stable-process-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV1.Command("nslookup", []string{"google.com"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*2, model.DNSEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	fakeManualResolver.SpecifyNextSelector(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   selector.Tag + "v2",
+	})
+	dockerInstanceV2, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV2.stop()
+
+	// HERE: V1 is stable and V2 is learning
+
+	t.Run("life-cycle-eviction-dns-v2-learning-new-process-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV2.Command("nslookup", []string{"google.es"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*2, model.DNSEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	fakeManualResolver.SpecifyNextSelector(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   selector.Tag + "v3",
+	})
+	dockerInstanceV3, err := test.StartADocker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dockerInstanceV3.stop()
+
+	// HERE: V1 is deleted, V2 is learning and V3 is learning
+
+	t.Run("life-cycle-eviction-dns-check-v1-evicted", func(t *testing.T) {
+
+		versions, err := test.GetProfileVersions(selector.Image)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, 2, len(versions))
+		assert.True(t, slices.Contains(versions, selector.Tag+"v2"))
+		assert.True(t, slices.Contains(versions, selector.Tag+"v3"))
+		assert.False(t, slices.Contains(versions, selector.Tag))
+	})
+
+	if err := test.SetProfileVersionState(&cgroupModel.WorkloadSelector{
+		Image: selector.Image,
+		Tag:   "*",
+	}, selector.Tag+"v3", profile.StableEventType); err != nil {
+		t.Fatal(err)
+	}
+
+	// HERE: V1 is deleted, V2 is learning and V3 is stable
+
+	t.Run("life-cycle-eviction-dns-v1-process-anomaly", func(t *testing.T) {
+		err = test.GetCustomEventSent(t, func() error {
+			cmd := dockerInstanceV3.Command("nslookup", []string{"google.fr"}, []string{})
+			_, _ = cmd.CombinedOutput()
+			return nil
+		}, func(r *rules.Rule, event *events.CustomEvent) bool {
+			assert.Equal(t, events.AnomalyDetectionRuleID, r.Rule.ID, "wrong custom event rule ID")
+			return true
+		}, time.Second*2, model.DNSEventType)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }

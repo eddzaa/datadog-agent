@@ -409,7 +409,23 @@ func (p *SecurityProfile) SetVersionState(imageTag string, state EventFilteringP
 	for _, et := range p.eventTypes {
 		if eventState, ok := ctx.eventTypeState[et]; ok {
 			eventState.state = state
+		} else {
+			ctx.eventTypeState[et] = &EventTypeState{
+				lastAnomalyNano: uint64(time.Now().UnixNano()),
+				state:           state,
+			}
 		}
 	}
 	return nil
+}
+
+// GetVersions returns the number of versions stored in the profile (debug purpose only)
+func (p *SecurityProfile) GetVersions() []string {
+	p.versionContextsLock.Lock()
+	defer p.versionContextsLock.Unlock()
+	versions := []string{}
+	for version, _ := range p.versionContexts {
+		versions = append(versions, version)
+	}
+	return versions
 }

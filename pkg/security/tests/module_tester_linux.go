@@ -133,6 +133,7 @@ runtime_security_config:
   security_profile:
     enabled: {{ .EnableSecurityProfile }}
 {{if .EnableSecurityProfile}}
+    max_image_tags: {{ .SecurityProfileMaxImageTags }}
     dir: {{ .SecurityProfileDir }}
     watch_dir: {{ .SecurityProfileWatchDir }}
     auto_suppression:
@@ -1689,4 +1690,28 @@ func (tm *testModule) SetProfileVersionState(selector *cgroupModel.WorkloadSelec
 		return err
 	}
 	return nil
+}
+
+func (tm *testModule) GetProfileVersions(imageName string) ([]string, error) {
+	p, ok := tm.probe.PlatformProbe.(*sprobe.EBPFProbe)
+	if !ok {
+		return []string{}, errors.New("no ebpf probe")
+	}
+
+	m := p.GetProfileManagers()
+	if m == nil {
+		return []string{}, errors.New("no profile managers")
+	}
+
+	spm := m.GetSecurityProfileManager()
+	if spm == nil {
+		return []string{}, errors.New("no security profile managers")
+	}
+
+	profile := spm.GetProfile(cgroupModel.WorkloadSelector{Image: imageName, Tag: "*"})
+	if profile == nil {
+		return []string{}, errors.New("no profile")
+	}
+
+	return profile.GetVersions(), nil
 }
