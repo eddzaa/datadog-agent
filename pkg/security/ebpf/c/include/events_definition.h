@@ -4,6 +4,8 @@
 #include "constants/custom.h"
 #include "structs/all.h"
 
+#define CORRUPTION_PADDING(amount) u64 corruption_padding[amount]
+
 struct invalidate_dentry_event_t {
     struct kevent_t event;
     u64 inode;
@@ -120,6 +122,7 @@ struct chmod_event_t {
     struct file_t file;
     u32 mode;
     u32 padding;
+    CORRUPTION_PADDING(1);
 };
 
 struct chown_event_t {
@@ -131,6 +134,7 @@ struct chown_event_t {
     struct file_t file;
     uid_t uid;
     gid_t gid;
+    CORRUPTION_PADDING(2);
 };
 
 struct mmap_event_t {
@@ -183,6 +187,7 @@ struct mkdir_event_t {
     struct file_t file;
     u32 mode;
     u32 padding;
+    CORRUPTION_PADDING(3);
 };
 
 struct init_module_event_t {
@@ -353,6 +358,7 @@ struct splice_event_t {
     struct file_t file;
     u32 pipe_entry_flag;
     u32 pipe_exit_flag;
+    CORRUPTION_PADDING(4);
 };
 
 struct umount_event_t {
@@ -373,6 +379,7 @@ struct unlink_event_t {
     struct file_t file;
     u32 flags;
     u32 padding;
+    CORRUPTION_PADDING(5);
 };
 
 struct chdir_event_t {
