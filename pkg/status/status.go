@@ -11,14 +11,14 @@ import (
 	"expvar"
 	"strings"
 
-	compAutodiscovery "github.com/DataDog/datadog-agent/comp/core/autodiscovery"
+	autodiscoveryComp "github.com/DataDog/datadog-agent/comp/core/autodiscovery"
+	autodiscoverystatus "github.com/DataDog/datadog-agent/comp/core/autodiscovery/status"
 	hostMetadataUtils "github.com/DataDog/datadog-agent/comp/metadata/host/hostimpl/utils"
 	"github.com/DataDog/datadog-agent/comp/metadata/inventoryagent"
 	"github.com/DataDog/datadog-agent/pkg/collector/python"
 	"github.com/DataDog/datadog-agent/pkg/config"
 	logsStatus "github.com/DataDog/datadog-agent/pkg/logs/status"
 	"github.com/DataDog/datadog-agent/pkg/status/apm"
-	"github.com/DataDog/datadog-agent/pkg/status/autodiscovery"
 	"github.com/DataDog/datadog-agent/pkg/status/clusteragent"
 	commonStatus "github.com/DataDog/datadog-agent/pkg/status/common"
 	"github.com/DataDog/datadog-agent/pkg/status/endpoints"
@@ -33,7 +33,7 @@ import (
 )
 
 // GetStatus grabs the status from expvar and puts it into a map
-func GetStatus(verbose bool, invAgent inventoryagent.Component, ac optional.Option[compAutodiscovery.Component]) (map[string]interface{}, error) {
+func GetStatus(verbose bool, invAgent inventoryagent.Component, ac optional.Option[autodiscoveryComp.Component]) (map[string]interface{}, error) {
 	stats, err := commonStatus.GetStatus(invAgent)
 	if err != nil {
 		return nil, err
@@ -77,11 +77,7 @@ func GetStatus(verbose bool, invAgent inventoryagent.Component, ac optional.Opti
 	}
 
 	if config.IsContainerized() {
-		if compAutodiscovery, ok := ac.Get(); ok {
-			autodiscovery.PopulateStatus(compAutodiscovery, stats)
-		} else {
-			autodiscovery.PopulateStatusWithoutAD(stats)
-		}
+		autodiscoverystatus.PopulateStatus(ac, stats)
 	}
 
 	remoteconfiguration.PopulateStatus(stats)
@@ -89,7 +85,7 @@ func GetStatus(verbose bool, invAgent inventoryagent.Component, ac optional.Opti
 }
 
 // GetAndFormatStatus gets and formats the status all in one go
-func GetAndFormatStatus(invAgent inventoryagent.Component, ac optional.Option[compAutodiscovery.Component]) ([]byte, error) {
+func GetAndFormatStatus(invAgent inventoryagent.Component, ac optional.Option[autodiscoveryComp.Component]) ([]byte, error) {
 	s, err := GetStatus(true, invAgent, ac)
 	if err != nil {
 		return nil, err
@@ -111,7 +107,7 @@ func GetAndFormatStatus(invAgent inventoryagent.Component, ac optional.Option[co
 // GetAndFormatSecurityAgentStatus gets and formats the security agent status
 func GetAndFormatSecurityAgentStatus(runtimeStatus, complianceStatus map[string]interface{}) ([]byte, error) {
 	// inventory metadata is not enabled in the security agent, we pass nil to GetStatus
-	s, err := GetStatus(true, nil, optional.NewNoneOption[compAutodiscovery.Component]())
+	s, err := GetStatus(true, nil, optional.NewNoneOption[autodiscoveryComp.Component]())
 	if err != nil {
 		return nil, err
 	}

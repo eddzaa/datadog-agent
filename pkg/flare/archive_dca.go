@@ -72,15 +72,13 @@ func createDCAArchive(fb flaretypes.FlareBuilder,
 		fb.AddFile("local", nil)
 	} else {
 		// The Status will be unavailable unless the agent is running.
-		if compAC, ok := ac.Get(); ok {
-			// Only zip it up if the agent is running
-			err := fb.AddFileFromFunc("cluster-agent-status.log", func() ([]byte, error) {
-				return clusteragentStatus.GetAndFormatStatus(compAC)
-			})
-			if err != nil {
-				log.Errorf("Error getting the status of the DCA, %q", err)
-				return
-			}
+		// Only zip it up if the agent is running
+		err := fb.AddFileFromFunc("cluster-agent-status.log", func() ([]byte, error) {
+			return clusteragentStatus.GetAndFormatStatus(ac)
+		})
+		if err != nil {
+			log.Errorf("Error getting the status of the DCA, %q", err)
+			return
 		}
 	}
 
