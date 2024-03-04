@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -34,6 +33,9 @@ func syncConfigWithWithURL(ctx context.Context, config pkgconfigmodel.ReaderWrit
 	ticker := time.NewTicker(refreshInterval)
 	// whether we managed to contact the core-agent, used to avoid spamming logs
 	connected := true
+	client := apiutils.GetClient(false)
+
+	log.Infof("Starting to sync config with core agent at %s", url.String())
 
 	for {
 		select {
@@ -41,19 +43,19 @@ func syncConfigWithWithURL(ctx context.Context, config pkgconfigmodel.ReaderWrit
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			data, err := apiutils.DoGetWithContext(ctx, http.DefaultClient, url.String(), apiutils.LeaveConnectionOpen)
+			data, err := apiutils.DoGetWithContext(ctx, client, url.String(), apiutils.LeaveConnectionOpen)
 			if err != nil {
 				if connected {
 					log.Warnf("Failed to fetch config from core agent: %v", err)
 					connected = false
+				} else {
+					log.Debugf("Failed to fetch config from core agent: %v", err)
 				}
 				continue
 			}
 
-			if !connected {
-				log.Debug("Succeeded to fetch config from core agent")
-				connected = true
-			}
+			log.Debug("Succeeded to fetch config from core agent")
+			connected = true
 
 			var configs map[string]interface{}
 			if err := json.Unmarshal(data, &configs); err != nil {
