@@ -50,6 +50,10 @@ func GetConfigFromCloudID(ctx context.Context, cloudID types.CloudID) (Config, e
 }
 
 func GetConfig(ctx context.Context, subscriptionID string) (Config, error) {
+	if cfg, ok := globalConfigs.Load(subscriptionID); ok {
+		return cfg.(Config), nil
+	}
+
 	globalConfigsMu.Lock()
 	defer globalConfigsMu.Unlock()
 
@@ -81,11 +85,13 @@ func GetConfig(ctx context.Context, subscriptionID string) (Config, error) {
 		return Config{}, err
 	}
 
-	return Config{
+	cfg := Config{
 		Credentials:          cred,
 		ComputeClientFactory: computeClientFactory,
 		ScannerSubscription:  metadata.Compute.SubscriptionID,
 		ScannerLocation:      metadata.Compute.Location,
 		ScannerResourceGroup: metadata.Compute.ResourceGroupName,
-	}, nil
+	}
+	globalConfigs.Store(subscriptionID, cfg)
+	return cfg, nil
 }
