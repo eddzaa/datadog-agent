@@ -9,6 +9,8 @@ package probe
 import (
 	"context"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,14 +25,12 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/security/secl/rules"
 	"github.com/DataDog/datadog-agent/pkg/security/serializers"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
-	etwutil "github.com/DataDog/datadog-agent/pkg/util/winutil/etw"
 	"github.com/DataDog/datadog-agent/pkg/windowsdriver/procmon"
 	"github.com/DataDog/datadog-go/v5/statsd"
+	"github.com/cenkalti/backoff"
 
 	"golang.org/x/sys/windows"
 )
-
-var parseUnicodeString = etwutil.ParseUnicodeString
 
 // WindowsProbe defines a Windows probe
 type WindowsProbe struct {
@@ -42,16 +42,21 @@ type WindowsProbe struct {
 	statsdClient statsd.ClientInterface
 
 	// internals
-	event         *model.Event
-	ctx           context.Context
-	cancelFnc     context.CancelFunc
-	wg            sync.WaitGroup
-	probe         *Probe
-	fieldHandlers *FieldHandlers
-	pm            *procmon.WinProcmon
-	onStart       chan *procmon.ProcessStartNotification
-	onStop        chan *procmon.ProcessStopNotification
-	onError       chan bool
+
+	// note that these events are zeroed out and reused on every notification
+	// what that means is that they're not thread safe; there needs to be one
+	// event for each goroutine that's doing event processing.
+	event             *model.Event
+	ctx               context.Context
+	cancelFnc         context.CancelFunc
+	wg                sync.WaitGroup
+	probe             *Probe
+	fieldHandlers     *FieldHandlers
+	pm                *procmon.WinProcmon
+	onStart           chan *procmon.ProcessStartNotification
+	onStop            chan *procmon.ProcessStopNotification
+	onError           chan bool
+	onETWNotification chan etwNotification
 
 	// ETW component for FIM
 	fileguid windows.GUID
@@ -59,6 +64,11 @@ type WindowsProbe struct {
 	//etwcomp    etw.Component
 	fimSession etw.Session
 	fimwg      sync.WaitGroup
+}
+
+type etwNotification struct {
+	arg any
+	pid uint32
 }
 
 /*
@@ -72,7 +82,7 @@ type etwCallback func(n interface{}, pid uint32)
 func (p *WindowsProbe) Init() error {
 
 	if !p.opts.disableProcmon {
-		pm, err := procmon.NewWinProcMon(p.onStart, p.onStop, p.onError)
+		pm, err := procmon.NewWinProcMon(p.onStart, p.onStop, p.onError, procmon.ProcmonDefaultReceiveSize, procmon.ProcmonDefaultNumBufs)
 		if err != nil {
 			return err
 		}
@@ -88,7 +98,6 @@ func (p *WindowsProbe) initEtwFIM() error {
 	}
 	// log at Warning right now because it's not expected to be enabled
 	log.Warnf("Enabling FIM processing")
-
 	etwSessionName := "SystemProbeFIM_ETW"
 	etwcomp, err := etwimpl.NewEtw()
 	if err != nil {
@@ -199,7 +208,6 @@ func (p *WindowsProbe) setupEtw(ecb etwCallback) error {
 
 	log.Info("Starting tracing...")
 	err := p.fimSession.StartTracing(func(e *etw.DDEventRecord) {
-		//log.Infof("Received event %d for PID %d", e.EventHeader.EventDescriptor.ID, e.EventHeader.ProcessID)
 		switch e.EventHeader.ProviderID {
 		case etw.DDGUID(p.fileguid):
 			switch e.EventHeader.EventDescriptor.ID {
@@ -254,34 +262,39 @@ func (p *WindowsProbe) setupEtw(ecb etwCallback) error {
 					ecb(cka, e.EventHeader.ProcessID)
 				}
 			case idRegOpenKey:
-				if cka, err := parseCreateRegistryKey(e); err == nil {
+				if cka, err := parseOpenRegistryKey(e); err == nil {
 					log.Debugf("Got idRegOpenKey %s", cka.string())
+					ecb(cka, e.EventHeader.ProcessID)
 				}
 
 			case idRegDeleteKey:
 				if dka, err := parseDeleteRegistryKey(e); err == nil {
 					log.Tracef("Got idRegDeleteKey %v", dka.string())
+					ecb(dka, e.EventHeader.ProcessID)
+
 				}
 			case idRegFlushKey:
-				if dka, err := parseDeleteRegistryKey(e); err == nil {
+				if dka, err := parseFlushKey(e); err == nil {
 					log.Tracef("Got idRegFlushKey %v", dka.string())
 				}
 			case idRegCloseKey:
-				if dka, err := parseDeleteRegistryKey(e); err == nil {
+				if dka, err := parseCloseKeyArgs(e); err == nil {
 					log.Debugf("Got idRegCloseKey %s", dka.string())
 					delete(regPathResolver, dka.keyObject)
 				}
 			case idQuerySecurityKey:
-				if dka, err := parseDeleteRegistryKey(e); err == nil {
+				if dka, err := parseQuerySecurityKeyArgs(e); err == nil {
 					log.Tracef("Got idQuerySecurityKey %v", dka.keyName)
 				}
 			case idSetSecurityKey:
-				if dka, err := parseDeleteRegistryKey(e); err == nil {
+				if dka, err := parseSetSecurityKeyArgs(e); err == nil {
 					log.Tracef("Got idSetSecurityKey %v", dka.keyName)
 				}
 			case idRegSetValueKey:
 				if svk, err := parseSetValueKey(e); err == nil {
 					log.Tracef("Got idRegSetValueKey %s", svk.string())
+					ecb(svk, e.EventHeader.ProcessID)
+
 				}
 
 			}
@@ -303,17 +316,7 @@ func (p *WindowsProbe) Start() error {
 		go func() {
 			defer p.fimwg.Done()
 			err := p.setupEtw(func(n interface{}, pid uint32) {
-				// pid will most likely be ignored here.
-
-				// handle incoming events here
-
-				// each event will come in as a different type
-				// parse it with
-				switch n.(type) {
-				case *createKeyArgs:
-					// do something
-				}
-				// etc.
+				p.onETWNotification <- etwNotification{n, pid}
 			})
 			log.Infof("Done StartTracing %v", err)
 		}()
@@ -329,7 +332,6 @@ func (p *WindowsProbe) Start() error {
 			var pce *model.ProcessCacheEntry
 			var err error
 			ev := p.zeroEvent()
-			var pidToCleanup uint32
 
 			select {
 			case <-p.ctx.Done():
@@ -370,6 +372,12 @@ func (p *WindowsProbe) Start() error {
 				}
 				ev.Type = uint32(model.ExecEventType)
 				ev.Exec.Process = &pce.Process
+
+				// use ProcessCacheEntry process context as process context
+				ev.ProcessCacheEntry = pce
+				ev.ProcessContext = &pce.ProcessContext
+
+				p.Resolvers.ProcessResolver.DequeueExited()
 			case stop := <-p.onStop:
 				pid := process.Pid(stop.Pid)
 				if pid == 0 {
@@ -379,7 +387,7 @@ func (p *WindowsProbe) Start() error {
 				log.Debugf("Received stop %v", stop)
 
 				pce = p.Resolvers.ProcessResolver.GetEntry(pid)
-				pidToCleanup = pid
+				p.Resolvers.ProcessResolver.AddToExitedQueue(pid)
 
 				ev.Type = uint32(model.ExitEventType)
 				if pce == nil {
@@ -387,31 +395,91 @@ func (p *WindowsProbe) Start() error {
 					continue
 				}
 				ev.Exit.Process = &pce.Process
-			}
+				// use ProcessCacheEntry process context as process context
+				ev.ProcessCacheEntry = pce
+				ev.ProcessContext = &pce.ProcessContext
 
-			if pce == nil {
-				continue
+				p.Resolvers.ProcessResolver.DequeueExited()
+			case notif := <-p.onETWNotification:
+				// handle incoming events here
+				// each event will come in as a different type
+				// parse it with
+				switch arg := notif.arg.(type) {
+				case *createNewFileArgs:
+					ev.Type = uint32(model.CreateNewFileEventType)
+					ev.CreateNewFile = model.CreateNewFileEvent{
+						File: model.FileEvent{
+							PathnameStr: arg.fileName,
+							BasenameStr: filepath.Base(arg.fileName),
+						},
+					}
+				case *createKeyArgs:
+					ev.Type = uint32(model.CreateRegistryKeyEventType)
+					ev.CreateRegistryKey = model.CreateRegistryKeyEvent{
+						Registry: model.RegistryEvent{
+							KeyPath: arg.computedFullPath,
+							KeyName: filepath.Base(arg.computedFullPath),
+						},
+					}
+				case *openKeyArgs:
+					ev.Type = uint32(model.OpenRegistryKeyEventType)
+					ev.OpenRegistryKey = model.OpenRegistryKeyEvent{
+						Registry: model.RegistryEvent{
+							KeyPath: arg.computedFullPath,
+							KeyName: filepath.Base(arg.computedFullPath),
+						},
+					}
+				case *deleteKeyArgs:
+					ev.Type = uint32(model.DeleteRegistryKeyEventType)
+					ev.DeleteRegistryKey = model.DeleteRegistryKeyEvent{
+						Registry: model.RegistryEvent{
+							KeyName: filepath.Base(arg.computedFullPath),
+							KeyPath: arg.computedFullPath,
+						},
+					}
+				case *setValueKeyArgs:
+					ev.Type = uint32(model.SetRegistryKeyValueEventType)
+					ev.SetRegistryKeyValue = model.SetRegistryKeyValueEvent{
+						Registry: model.RegistryEvent{
+							KeyName: filepath.Base(arg.computedFullPath),
+							KeyPath: arg.computedFullPath,
+						},
+						ValueName: arg.valueName,
+					}
+				}
+				if ev.Type != uint32(model.UnknownEventType) {
+					errRes := p.setProcessContext(notif.pid, ev)
+					if errRes != nil {
+						log.Debugf("%v", errRes)
+					}
+				}
 			}
-
-			// use ProcessCacheEntry process context as process context
-			ev.ProcessCacheEntry = pce
-			ev.ProcessContext = &pce.ProcessContext
 
 			p.DispatchEvent(ev)
-
-			if pidToCleanup != 0 {
-				p.Resolvers.ProcessResolver.DeleteEntry(pidToCleanup, time.Now())
-				pidToCleanup = 0
-			}
 		}
 	}()
 	return p.pm.Start()
 }
 
+func (p *WindowsProbe) setProcessContext(pid uint32, event *model.Event) error {
+	err := backoff.Retry(func() error {
+		pce := p.Resolvers.ProcessResolver.GetEntry(pid)
+		if pce == nil {
+			return fmt.Errorf("Could not resolve process for Process: %v", pid)
+		}
+		event.ProcessCacheEntry = pce
+		event.ProcessContext = &pce.ProcessContext
+		return nil
+
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(50*time.Millisecond), 5))
+	return err
+}
+
 // DispatchEvent sends an event to the probe event handler
 func (p *WindowsProbe) DispatchEvent(event *model.Event) {
+
 	traceEvent("Dispatching event %s", func() ([]byte, model.EventType, error) {
-		eventJSON, err := serializers.MarshalEvent(event)
+		eventJSON, err := serializers.MarshalEvent(event, nil)
 		return eventJSON, event.GetEventType(), err
 	})
 
@@ -450,15 +518,16 @@ func NewWindowsProbe(probe *Probe, config *config.Config, opts Opts) (*WindowsPr
 	ctx, cancelFnc := context.WithCancel(context.Background())
 
 	p := &WindowsProbe{
-		probe:        probe,
-		config:       config,
-		opts:         opts,
-		statsdClient: opts.StatsdClient,
-		ctx:          ctx,
-		cancelFnc:    cancelFnc,
-		onStart:      make(chan *procmon.ProcessStartNotification),
-		onStop:       make(chan *procmon.ProcessStopNotification),
-		onError:      make(chan bool),
+		probe:             probe,
+		config:            config,
+		opts:              opts,
+		statsdClient:      opts.StatsdClient,
+		ctx:               ctx,
+		cancelFnc:         cancelFnc,
+		onStart:           make(chan *procmon.ProcessStartNotification),
+		onStop:            make(chan *procmon.ProcessStopNotification),
+		onError:           make(chan bool),
+		onETWNotification: make(chan etwNotification),
 	}
 
 	var err error
@@ -531,6 +600,11 @@ func (p *WindowsProbe) zeroEvent() *model.Event {
 	p.event.Zero()
 	p.event.FieldHandlers = p.fieldHandlers
 	return p.event
+}
+
+// Origin returns origin
+func (p *Probe) Origin() string {
+	return ""
 }
 
 // NewProbe instantiates a new runtime security agent probe

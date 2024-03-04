@@ -16,9 +16,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/DataDog/datadog-agent/comp/core/secrets"
 	"github.com/DataDog/datadog-agent/pkg/collector/check/defaults"
@@ -28,8 +31,6 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 	"github.com/DataDog/datadog-agent/pkg/util/optional"
 	"github.com/DataDog/datadog-agent/pkg/util/system"
-	"golang.org/x/exp/slices"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -543,6 +544,8 @@ func InitConfig(config pkgconfigmodel.Config) {
 	config.BindEnvAndSetDefault("dogstatsd_no_aggregation_pipeline", true)
 	// How many metrics maximum in payloads sent by the no-aggregation pipeline to the intake.
 	config.BindEnvAndSetDefault("dogstatsd_no_aggregation_pipeline_batch_size", 2048)
+	// Force the amount of dogstatsd workers (mainly used for benchmarks or some very specific use-case)
+	config.BindEnvAndSetDefault("dogstatsd_workers_count", 0)
 
 	// To enable the following feature, GODEBUG must contain `madvdontneed=1`
 	config.BindEnvAndSetDefault("dogstatsd_mem_based_rate_limiter.enabled", false)
@@ -675,6 +678,13 @@ func InitConfig(config pkgconfigmodel.Config) {
 	config.SetKnown("snmp_listener.min_collection_interval")
 	config.SetKnown("snmp_listener.namespace")
 	config.SetKnown("snmp_listener.use_device_id_as_hostname")
+	config.SetKnown("snmp_listener.ping")
+	config.SetKnown("snmp_listener.ping.enabled")
+	config.SetKnown("snmp_listener.ping.count")
+	config.SetKnown("snmp_listener.ping.interval")
+	config.SetKnown("snmp_listener.ping.timeout")
+	config.SetKnown("snmp_listener.ping.linux")
+	config.SetKnown("snmp_listener.ping.linux.use_raw_socket")
 
 	bindEnvAndSetLogsConfigKeys(config, "network_devices.snmp_traps.forwarder.")
 	config.BindEnvAndSetDefault("network_devices.snmp_traps.enabled", false)
@@ -739,6 +749,9 @@ func InitConfig(config pkgconfigmodel.Config) {
 	// all the metadata for the VM.
 	// Used internally to protect against configurations where metadata endpoints return incorrect values with 200 status codes.
 	config.BindEnvAndSetDefault("metadata_endpoints_max_hostname_size", 255)
+
+	// Duration during which the host tags will be submitted with metrics.
+	config.BindEnvAndSetDefault("expected_tags_duration", time.Duration(0))
 
 	// EC2
 	config.BindEnvAndSetDefault("ec2_use_windows_prefix_detection", false)
@@ -916,6 +929,10 @@ func InitConfig(config pkgconfigmodel.Config) {
 	bindEnvAndSetLogsConfigKeys(config, "database_monitoring.samples.")
 	bindEnvAndSetLogsConfigKeys(config, "database_monitoring.activity.")
 	bindEnvAndSetLogsConfigKeys(config, "database_monitoring.metrics.")
+	config.BindEnvAndSetDefault("database_monitoring.autodiscovery.aurora.enabled", false)
+	config.BindEnvAndSetDefault("database_monitoring.autodiscovery.aurora.discovery_interval", 300)
+	config.BindEnvAndSetDefault("database_monitoring.autodiscovery.aurora.query_timeout", 10)
+	config.BindEnvAndSetDefault("database_monitoring.autodiscovery.aurora.tags", []string{"datadoghq.com/scrape:true"})
 
 	config.BindEnvAndSetDefault("logs_config.dd_port", 10516)
 	config.BindEnvAndSetDefault("logs_config.dev_mode_use_proto", true)
@@ -1003,6 +1020,7 @@ func InitConfig(config pkgconfigmodel.Config) {
 	config.BindEnvAndSetDefault("external_metrics_provider.split_batches_with_backoff", false)  // Splits batches and runs queries with errors individually with an exponential backoff
 	pkgconfigmodel.AddOverrideFunc(sanitizeExternalMetricsProviderChunkSize)
 	// Cluster check Autodiscovery
+	config.BindEnvAndSetDefault("cluster_checks.support_hybrid_ignore_ad_tags", false) // TODO(CINT)(Agent 7.53+) Remove this flag when hybrid ignore_ad_tags is fully deprecated
 	config.BindEnvAndSetDefault("cluster_checks.enabled", false)
 	config.BindEnvAndSetDefault("cluster_checks.node_expiration_timeout", 30) // value in seconds
 	config.BindEnvAndSetDefault("cluster_checks.warmup_duration", 30)         // value in seconds
@@ -1055,7 +1073,7 @@ func InitConfig(config pkgconfigmodel.Config) {
 	config.BindEnvAndSetDefault("admission_controller.auto_instrumentation.patcher.enabled", false)
 	config.BindEnvAndSetDefault("admission_controller.auto_instrumentation.patcher.fallback_to_file_provider", false)                                // to be enabled only in e2e tests
 	config.BindEnvAndSetDefault("admission_controller.auto_instrumentation.patcher.file_provider_path", "/etc/datadog-agent/patch/auto-instru.json") // to be used only in e2e tests
-	config.BindEnvAndSetDefault("admission_controller.inject_auto_detected_libraries", true)                                                         // allows injecting libraries for languages detected by automatic language detection feature
+	config.BindEnvAndSetDefault("admission_controller.auto_instrumentation.inject_auto_detected_libraries", true)                                    // allows injecting libraries for languages detected by automatic language detection feature
 	config.BindEnv("admission_controller.auto_instrumentation.init_resources.cpu")
 	config.BindEnv("admission_controller.auto_instrumentation.init_resources.memory")
 	config.BindEnvAndSetDefault("admission_controller.cws_instrumentation.enabled", false)
@@ -1069,6 +1087,17 @@ func InitConfig(config pkgconfigmodel.Config) {
 	config.BindEnvAndSetDefault("admission_controller.cws_instrumentation.image_tag", "latest")
 	config.BindEnv("admission_controller.cws_instrumentation.init_resources.cpu")
 	config.BindEnv("admission_controller.cws_instrumentation.init_resources.memory")
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.enabled", false)
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.provider", "")
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.endpoint", "/agentsidecar")
+	// Should be able to parse it to a list of webhook selectors
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.selectors", "[]")
+	// Should be able to parse it to a list of env vars and resource limits
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.profiles", "[]")
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.container_registry", "gcr.io/datadoghq")
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.image_name", "agent")
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.image_tag", "latest")
+	config.BindEnvAndSetDefault("admission_controller.agent_sidecar.cluster_agent.enabled", "true")
 
 	// Telemetry
 	// Enable telemetry metrics on the internals of the Agent.
@@ -1111,7 +1140,6 @@ func InitConfig(config pkgconfigmodel.Config) {
 	config.BindEnvAndSetDefault("orchestrator_explorer.manifest_collection.enabled", true)
 	config.BindEnvAndSetDefault("orchestrator_explorer.manifest_collection.buffer_manifest", true)
 	config.BindEnvAndSetDefault("orchestrator_explorer.manifest_collection.buffer_flush_interval", 20*time.Second)
-	config.BindEnvAndSetDefault("orchestrator_explorer.run_on_node_agent", true)
 
 	// Container lifecycle configuration
 	config.BindEnvAndSetDefault("container_lifecycle.enabled", true)
@@ -1191,7 +1219,7 @@ func InitConfig(config pkgconfigmodel.Config) {
 	// Datadog security agent (compliance)
 	config.BindEnvAndSetDefault("compliance_config.enabled", false)
 	config.BindEnvAndSetDefault("compliance_config.xccdf.enabled", false) // deprecated, use host_benchmarks instead
-	config.BindEnvAndSetDefault("compliance_config.host_benchmarks.enabled", false)
+	config.BindEnvAndSetDefault("compliance_config.host_benchmarks.enabled", true)
 	config.BindEnvAndSetDefault("compliance_config.database_benchmarks.enabled", false)
 	config.BindEnvAndSetDefault("compliance_config.check_interval", 20*time.Minute)
 	config.BindEnvAndSetDefault("compliance_config.check_max_events_per_run", 100)
@@ -1271,7 +1299,15 @@ func InitConfig(config pkgconfigmodel.Config) {
 
 	// Language Detection
 	config.BindEnvAndSetDefault("language_detection.enabled", false)
+	// client period represents how frequently newly detected languages are reported to the language detection handler
 	config.BindEnvAndSetDefault("language_detection.client_period", "10s")
+	// cleanup period represents how frequently we check for expired languages and remove them
+	config.BindEnvAndSetDefault("language_detection.cleanup.period", "10m")
+	// TTL refresh period represents how frequently we refresh the TTL of detected languages
+	config.BindEnvAndSetDefault("language_detection.cleanup.ttl_refresh_period", "20m")
+	// language TTL represents the TTL that is set for each language when it is detected
+	// it is also used when refreshing the expiration timestamp of the language
+	config.BindEnvAndSetDefault("language_detection.cleanup.language_ttl", "30m")
 
 	setupAPM(config)
 	OTLP(config)
@@ -1401,8 +1437,8 @@ func Merge(configPaths []string, config pkgconfigmodel.Config) error {
 
 func findUnknownKeys(config pkgconfigmodel.Config) []string {
 	var unknownKeys []string
-	knownKeys := config.GetKnownKeys()
-	loadedKeys := config.AllKeys()
+	knownKeys := config.GetKnownKeysLowercased()
+	loadedKeys := config.AllKeysLowercased()
 	for _, key := range loadedKeys {
 		if _, found := knownKeys[key]; !found {
 			// Check if any subkey terminated with a '.*' wildcard is marked as known
@@ -1449,7 +1485,7 @@ func findUnexpectedUnicode(config pkgconfigmodel.Config) []string {
 		}
 	}
 
-	allKeys := config.AllKeys()
+	allKeys := config.AllKeysLowercased()
 	for _, key := range allKeys {
 		checkAndRecordString(key, fmt.Sprintf("Configuration key string '%s'", key))
 		if unknownValue := config.Get(key); unknownValue != nil {

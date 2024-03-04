@@ -10,15 +10,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	ddconfig "github.com/DataDog/datadog-agent/pkg/config"
 	"github.com/DataDog/datadog-agent/pkg/process/procutil"
 )
 
 func TestExtractServiceMetadata(t *testing.T) {
 	tests := []struct {
-		name               string
-		cmdline            []string
-		expectedServiceTag string
+		name                 string
+		cmdline              []string
+		useImprovedAlgorithm bool
+		expectedServiceTag   string
 	}{
 		{
 			name:               "empty",
@@ -111,27 +111,187 @@ func TestExtractServiceMetadata(t *testing.T) {
 			expectedServiceTag: "process_context:cassandra",
 		},
 		{
+			name: "java with -m flag",
+			cmdline: []string{
+				"java", "-Des.networkaddress.cache.ttl=60", "-Des.networkaddress.cache.negative.ttl=10", "-Djava.security.manager=allow", "-XX:+AlwaysPreTouch",
+				"-Xss1m", "-Djava.awt.headless=true", "-Dfile.encoding=UTF-8", "-Djna.nosys=true", "-XX:-OmitStackTraceInFastThrow", "-Dio.netty.noUnsafe=true",
+				"-Dio.netty.noKeySetOptimization=true", "-Dio.netty.recycler.maxCapacityPerThread=0", "-Dlog4j.shutdownHookEnabled=false", "-Dlog4j2.disable.jmx=true",
+				"-Dlog4j2.formatMsgNoLookups=true", "-Djava.locale.providers=SPI,COMPAT", "--add-opens=java.base/java.io=org.elasticsearch.preallocate",
+				"-XX:+UseG1GC", "-Djava.io.tmpdir=/tmp/elasticsearch-11638915669270544049", "-XX:+HeapDumpOnOutOfMemoryError", "-XX:+ExitOnOutOfMemoryError",
+				"-XX:HeapDumpPath=data", "-XX:ErrorFile=logs/hs_err_pid%p.log", "-Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,level,pid,tags:filecount=32,filesize=64m",
+				"-Des.cgroups.hierarchy.override=/", "-XX:ActiveProcessorCount=1", "-Djava.net.preferIPv4Stack=true", "-XX:-HeapDumpOnOutOfMemoryError", "-Xms786m", "-Xmx786m",
+				"-XX:MaxDirectMemorySize=412090368", "-XX:G1HeapRegionSize=4m", "-XX:InitiatingHeapOccupancyPercent=30", "-XX:G1ReservePercent=15", "-Des.distribution.type=tar",
+				"--module-path", "/usr/share/elasticsearch/lib", "--add-modules=jdk.net", "--add-modules=org.elasticsearch.preallocate", "-m",
+				"org.elasticsearch.server/org.elasticsearch.bootstrap.Elasticsearch",
+			},
+			expectedServiceTag: "process_context:Elasticsearch",
+		},
+		{
+			name: "java with --module flag",
+			cmdline: []string{
+				"java", "-Des.networkaddress.cache.ttl=60", "-Des.networkaddress.cache.negative.ttl=10", "-Djava.security.manager=allow", "-XX:+AlwaysPreTouch",
+				"-Xss1m", "-Djava.awt.headless=true", "-Dfile.encoding=UTF-8", "-Djna.nosys=true", "-XX:-OmitStackTraceInFastThrow", "-Dio.netty.noUnsafe=true",
+				"-Dio.netty.noKeySetOptimization=true", "-Dio.netty.recycler.maxCapacityPerThread=0", "-Dlog4j.shutdownHookEnabled=false", "-Dlog4j2.disable.jmx=true",
+				"-Dlog4j2.formatMsgNoLookups=true", "-Djava.locale.providers=SPI,COMPAT", "--add-opens=java.base/java.io=org.elasticsearch.preallocate",
+				"-XX:+UseG1GC", "-Djava.io.tmpdir=/tmp/elasticsearch-11638915669270544049", "-XX:+HeapDumpOnOutOfMemoryError", "-XX:+ExitOnOutOfMemoryError",
+				"-XX:HeapDumpPath=data", "-XX:ErrorFile=logs/hs_err_pid%p.log", "-Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,level,pid,tags:filecount=32,filesize=64m",
+				"-Des.cgroups.hierarchy.override=/", "-XX:ActiveProcessorCount=1", "-Djava.net.preferIPv4Stack=true", "-XX:-HeapDumpOnOutOfMemoryError", "-Xms786m", "-Xmx786m",
+				"-XX:MaxDirectMemorySize=412090368", "-XX:G1HeapRegionSize=4m", "-XX:InitiatingHeapOccupancyPercent=30", "-XX:G1ReservePercent=15", "-Des.distribution.type=tar",
+				"--module-path", "/usr/share/elasticsearch/lib", "--add-modules=jdk.net", "--add-modules=org.elasticsearch.preallocate", "--module",
+				"org.elasticsearch.server/org.elasticsearch.bootstrap.Elasticsearch",
+			},
+			expectedServiceTag: "process_context:Elasticsearch",
+		},
+		{
+			name: "java with --module flag without main class",
+			cmdline: []string{
+				"java", "-Des.networkaddress.cache.ttl=60", "-Des.networkaddress.cache.negative.ttl=10", "-Djava.security.manager=allow", "-XX:+AlwaysPreTouch",
+				"--module-path", "/usr/share/elasticsearch/lib", "--add-modules=jdk.net", "--add-modules=org.elasticsearch.preallocate", "--module",
+				"org.elasticsearch.server",
+			},
+			expectedServiceTag: "process_context:server",
+		},
+		{
 			name: "java space in java executable path",
 			cmdline: []string{
 				"/home/dd/my java dir/java", "com.dog.cat",
 			},
 			expectedServiceTag: "process_context:cat",
 		},
+		{
+			name: "java jar with dd.Service",
+			cmdline: []string{
+				"/usr/lib/jvm/java-1.17.0-openjdk-amd64/bin/java", "-Dsun.misc.URLClassPath.disableJarChecking=true",
+				"-Xms1024m", "-Xmx1024m", "-Dlogging.config=file:/usr/local/test/etc/logback-spring-datadog.xml",
+				"-Dlog4j2.formatMsgNoLookups=true", "-javaagent:/opt/datadog-agent/dd-java-agent.jar",
+				"-Ddd.profiling.enabled=true", "-Ddd.logs.injection=true", "-Ddd.trace.propagation.style.inject=datadog,b3multi",
+				"-Ddd.rabbitmq.legacy.tracing.enabled=false", "-Ddd.service=myservice", "-jar",
+				"/usr/local/test/app/myservice-core-1.1.15-SNAPSHOT.jar", "--spring.profiles.active=test",
+			},
+			expectedServiceTag: "process_context:myservice",
+		},
+		{
+			name: "java with unknown flags",
+			cmdline: []string{
+				"java", "-Des.networkaddress.cache.ttl=60", "-Des.networkaddress.cache.negative.ttl=10",
+				"-Djava.security.manager=allow", "-XX:+AlwaysPreTouch", "-Xss1m",
+			},
+			expectedServiceTag: "process_context:java",
+		},
+		{
+			name: "java jar with snapshot",
+			cmdline: []string{
+				"/usr/lib/jvm/java-1.17.0-openjdk-amd64/bin/java", "-Dsun.misc.URLClassPath.disableJarChecking=true",
+				"-Xms1024m", "-Xmx1024m", "-Dlogging.config=file:/usr/local/test/etc/logback-spring-datadog.xml",
+				"-Dlog4j2.formatMsgNoLookups=true", "-javaagent:/opt/datadog-agent/dd-java-agent.jar",
+				"-Ddd.profiling.enabled=true", "-Ddd.logs.injection=true", "-Ddd.trace.propagation.style.inject=datadog,b3multi",
+				"-Ddd.rabbitmq.legacy.tracing.enabled=false", "-jar",
+				"/usr/local/test/app/myservice-core-1.1.15-SNAPSHOT.jar", "--spring.profiles.active=test",
+			},
+			expectedServiceTag: "process_context:myservice-core",
+		},
+		{
+			name: "java jar with snapshot with another version",
+			cmdline: []string{
+				"/usr/lib/jvm/java-1.17.0-openjdk-amd64/bin/java", "-Dsun.misc.URLClassPath.disableJarChecking=true",
+				"-Xms1024m", "-Xmx1024m", "-Dlogging.config=file:/usr/local/test/etc/logback-spring-datadog.xml",
+				"-Dlog4j2.formatMsgNoLookups=true", "-javaagent:/opt/datadog-agent/dd-java-agent.jar",
+				"-Ddd.profiling.enabled=true", "-Ddd.logs.injection=true", "-Ddd.trace.propagation.style.inject=datadog,b3multi",
+				"-Ddd.rabbitmq.legacy.tracing.enabled=false", "-jar",
+				"/usr/local/test/app/myservice-core-1-SNAPSHOT.jar", "--spring.profiles.active=test",
+			},
+			expectedServiceTag: "process_context:myservice-core",
+		},
+		{
+			name: "java jar with snapshot without version",
+			cmdline: []string{
+				"/usr/lib/jvm/java-1.17.0-openjdk-amd64/bin/java", "-Dsun.misc.URLClassPath.disableJarChecking=true",
+				"-Xms1024m", "-Xmx1024m", "-Dlogging.config=file:/usr/local/test/etc/logback-spring-datadog.xml",
+				"-Dlog4j2.formatMsgNoLookups=true", "-javaagent:/opt/datadog-agent/dd-java-agent.jar",
+				"-Ddd.profiling.enabled=true", "-Ddd.logs.injection=true", "-Ddd.trace.propagation.style.inject=datadog,b3multi",
+				"-Ddd.rabbitmq.legacy.tracing.enabled=false", "-jar",
+				"/usr/local/test/app/myservice-core-SNAPSHOT.jar", "--spring.profiles.active=test",
+			},
+			expectedServiceTag: "process_context:myservice-core",
+		},
+		{
+			name: "node js with advanced guess disabled",
+			cmdline: []string{
+				"/usr/bin/node",
+				"--require",
+				"/private/node-patches_legacy/register.js",
+				"--preserve-symlinks-main",
+				"--",
+				"/somewhere/index.js",
+			},
+			expectedServiceTag: "process_context:node",
+		},
+		{
+			name:                 "node js with advanced guess enabled with a broken package.json",
+			useImprovedAlgorithm: true,
+			cmdline: []string{
+				"/usr/bin/node",
+				"./nodejs/testData/inner/index.js",
+			},
+			expectedServiceTag: "process_context:node",
+		},
+		{
+			name:                 "node js with advanced guess enabled and found a valid package.json",
+			useImprovedAlgorithm: true,
+			cmdline: []string{
+				"/usr/bin/node",
+				"--require",
+				"/private/node-patches_legacy/register.js",
+				"--preserve-symlinks-main",
+				"--",
+				"./nodejs/testData/index.js",
+			},
+			expectedServiceTag: "process_context:my-awesome-package",
+		},
+		{
+			name: "dotnet cmd with dll",
+			cmdline: []string{
+				"/usr/bin/dotnet", "./myservice.dll",
+			},
+			useImprovedAlgorithm: true,
+			expectedServiceTag:   "process_context:myservice",
+		},
+		{
+			name: "dotnet cmd with dll and options",
+			cmdline: []string{
+				"/usr/bin/dotnet", "-v", "--", "/app/lib/myservice.dll",
+			},
+			useImprovedAlgorithm: true,
+			expectedServiceTag:   "process_context:myservice",
+		},
+		{
+			name: "dotnet cmd with unrecognized options",
+			cmdline: []string{
+				"/usr/bin/dotnet", "run", "--project", "./projects/proj1/proj1.csproj",
+			},
+			useImprovedAlgorithm: true,
+			expectedServiceTag:   "process_context:dotnet",
+		},
+		{
+			name: "dotnet cmd with improved algorithm disabled",
+			cmdline: []string{
+				"/usr/bin/dotnet", "./myservice.dll",
+			},
+			expectedServiceTag: "process_context:dotnet",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockConfig := ddconfig.MockSystemProbe(t)
-			mockConfig.SetWithoutSource("system_probe_config.process_service_inference.enabled", true)
-			mockConfig.SetWithoutSource("system_probe_config.process_service_inference.use_windows_service_name", true)
-
 			proc := procutil.Process{
 				Pid:     1,
 				Cmdline: tt.cmdline,
 			}
 			procsByPid := map[int32]*procutil.Process{proc.Pid: &proc}
-
-			se := NewServiceExtractor(mockConfig)
+			serviceExtractorEnabled := true
+			useWindowsServiceName := true
+			useImprovedAlgorithm := tt.useImprovedAlgorithm
+			se := NewServiceExtractor(serviceExtractorEnabled, useWindowsServiceName, useImprovedAlgorithm)
 			se.Extract(procsByPid)
 			assert.Equal(t, []string{tt.expectedServiceTag}, se.GetServiceContext(proc.Pid))
 		})
@@ -139,15 +299,15 @@ func TestExtractServiceMetadata(t *testing.T) {
 }
 
 func TestExtractServiceMetadataDisabled(t *testing.T) {
-	mockConfig := ddconfig.Mock(t)
-	mockConfig.SetWithoutSource("system_probe_config.process_service_inference.enabled", false)
-
 	proc := procutil.Process{
 		Pid:     1,
 		Cmdline: []string{"/bin/bash"},
 	}
 	procsByPid := map[int32]*procutil.Process{proc.Pid: &proc}
-	se := NewServiceExtractor(mockConfig)
+	serviceExtractorEnabled := false
+	useWindowsServiceName := false
+	useImprovedAlgorithm := false
+	se := NewServiceExtractor(serviceExtractorEnabled, useWindowsServiceName, useImprovedAlgorithm)
 	se.Extract(procsByPid)
 	assert.Empty(t, se.GetServiceContext(proc.Pid))
 }

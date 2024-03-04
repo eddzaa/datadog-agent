@@ -46,7 +46,7 @@ type testConfig struct {
 }
 
 const (
-	testDirRoot  = "/opt/kernel-version-testing/system-probe-tests"
+	testDirRoot  = "/system-probe-tests"
 	ciVisibility = "/ci-visibility"
 )
 
@@ -61,6 +61,7 @@ var timeouts = map[*regexp.Regexp]time.Duration{
 	regexp.MustCompile("pkg/network/protocols/http$"): 15 * time.Minute,
 	regexp.MustCompile("pkg/network/tracer$"):         55 * time.Minute,
 	regexp.MustCompile("pkg/network/usm$"):            30 * time.Minute,
+	regexp.MustCompile("pkg/security/.*"):             30 * time.Minute,
 }
 
 func getTimeout(pkg string) time.Duration {
@@ -290,6 +291,28 @@ func getProps() (map[string]string, error) {
 	}, nil
 }
 
+func pathEmbedded(fullPath, embedded string) bool {
+	normalized := fmt.Sprintf("/%s/", strings.Trim(embedded, "/"))
+
+	return strings.Contains(fullPath, normalized)
+}
+
+func fixAssetPermissions() error {
+	matches, err := glob(testDirRoot, `.*\.o`, func(path string) bool {
+		return pathEmbedded(path, "pkg/ebpf/bytecode/build")
+	})
+	if err != nil {
+		return fmt.Errorf("glob assets: %s", err)
+	}
+
+	for _, file := range matches {
+		if err := os.Chown(file, 0, 0); err != nil {
+			return fmt.Errorf("chown %s: %s", file, err)
+		}
+	}
+	return nil
+}
+
 func run() error {
 	props, err := getProps()
 	if err != nil {
@@ -299,6 +322,10 @@ func run() error {
 	testConfig, err := buildTestConfiguration()
 	if err != nil {
 		return fmt.Errorf("failed to build test configuration: %w", err)
+	}
+
+	if err := fixAssetPermissions(); err != nil {
+		return fmt.Errorf("asset perms: %s", err)
 	}
 
 	if err := os.RemoveAll(ciVisibility); err != nil {
