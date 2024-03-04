@@ -103,8 +103,6 @@ func TestGetHostnameShellCmd(t *testing.T) {
 	}
 	defer os.Exit(0)
 
-
-
 	args := os.Args
 	for len(args) > 0 {
 		if args[0] == "--" {
