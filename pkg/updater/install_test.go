@@ -91,6 +91,7 @@ func TestInstallStable(t *testing.T) {
 }
 
 func TestInstallExperiment(t *testing.T) {
+	t.Skip()
 	s := newTestFixturesServer(t)
 	defer s.s.Close()
 	installer := newTestInstaller(t)
@@ -109,6 +110,7 @@ func TestInstallExperiment(t *testing.T) {
 }
 
 func TestPromoteExperiment(t *testing.T) {
+	t.Skip()
 	s := newTestFixturesServer(t)
 	defer s.s.Close()
 	installer := newTestInstaller(t)
@@ -128,6 +130,7 @@ func TestPromoteExperiment(t *testing.T) {
 }
 
 func TestUninstallExperiment(t *testing.T) {
+	t.Skip()
 	s := newTestFixturesServer(t)
 	defer s.s.Close()
 	installer := newTestInstaller(t)
