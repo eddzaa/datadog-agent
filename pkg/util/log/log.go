@@ -276,7 +276,7 @@ func (sw *loggerPointer) error(s string) error {
 
 // error logs at the error level and the current stack depth plus the additional given one, called with sw.l held
 func (sw *loggerPointer) errorStackDepth(s string, depth int) error {
-	l := sw.Load() // cHeck if logger load well
+	l := sw.Load() // TODO: Check if logger load well
 	scrubbed := l.scrub(s)
 	l.inner.SetAdditionalStackDepth(defaultStackDepth + depth) //nolint:errcheck
 	err := l.inner.Error(scrubbed)
