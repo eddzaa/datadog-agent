@@ -971,7 +971,7 @@ func (m *SecurityProfileManager) getEventTypeState(profile *SecurityProfile, pct
 	eventState, ok := pctx.eventTypeState[event.GetEventType()]
 	if !ok {
 		eventState = &EventTypeState{
-			lastAnomalyNano: profile.loadedNano,
+			lastAnomalyNano: pctx.firstSeenNano,
 			state:           AutoLearning,
 		}
 		pctx.eventTypeState[eventType] = eventState

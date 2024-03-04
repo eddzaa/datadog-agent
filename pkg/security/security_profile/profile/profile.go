@@ -222,6 +222,9 @@ func (p *SecurityProfile) GetState(imageTag string) EventFilteringProfileState {
 	if !ok {
 		return NoProfile
 	}
+	if len(pCtx.eventTypeState) == 0 {
+		return AutoLearning
+	}
 	state := StableEventType
 	for _, et := range p.eventTypes {
 		s, ok := pCtx.eventTypeState[et]
