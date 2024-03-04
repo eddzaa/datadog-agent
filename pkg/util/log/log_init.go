@@ -8,9 +8,15 @@
 package log
 
 import (
+	"os"
+
 	"github.com/cihub/seelog"
 )
 
 func init() {
-	SetupLogger(seelog.Default, "debug")
+	level := os.Getenv("DD_LOG_LEVEL")
+	if level == "" {
+		level = "debug"
+	}
+	SetupLogger(seelog.Default, level)
 }

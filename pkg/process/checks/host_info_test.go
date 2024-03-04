@@ -105,8 +105,7 @@ func TestGetHostnameShellCmd(t *testing.T) {
 	}
 	defer os.Exit(0)
 
-	// Setup logger due to int logger in debug mode that made the test fail
-	log.SetupLogger(seelog.Default, "info")
+
 
 	args := os.Args
 	for len(args) > 0 {
@@ -140,6 +139,6 @@ func fakeExecCommand(command string, args ...string) *exec.Cmd {
 	cs := []string{"-test.run=TestGetHostnameShellCmd", "--", command}
 	cs = append(cs, args...)
 	cmd := exec.Command(os.Args[0], cs...)
-	cmd.Env = []string{"GO_TEST_PROCESS=1"}
+	cmd.Env = []string{"GO_TEST_PROCESS=1", "DD_LOG_LEVEL=info"} // Set LOG LEVEL to info
 	return cmd
 }
