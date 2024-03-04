@@ -107,11 +107,7 @@ func requestFlare(_ log.Component, config config.Component, _ secrets.Component,
 			fmt.Fprintln(color.Output, color.RedString("The agent was unable to make a full flare: %s.", e.Error()))
 		}
 		fmt.Fprintln(color.Output, color.YellowString("Initiating flare locally, some logs will be missing."))
-<<<<<<< HEAD
 		filePath, e = flare.CreateSecurityAgentArchive(true, logFile, nil)
-=======
-		filePath, e = flare.CreateSecurityAgentArchive(true, logFile, nil, nil)
->>>>>>> 6477db95e2 (fix linter)
 		if e != nil {
 			fmt.Printf("The flare zipfile failed to be created: %s\n", e)
 			return e
