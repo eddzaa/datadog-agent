@@ -16,7 +16,6 @@ import (
 	"github.com/DataDog/datadog-agent/comp/core/secrets"
 	pkgconfigmodel "github.com/DataDog/datadog-agent/pkg/config/model"
 	pkgconfigsetup "github.com/DataDog/datadog-agent/pkg/config/setup"
-	"github.com/DataDog/datadog-agent/pkg/util/flavor"
 )
 
 // Reader is a subset of Config that only allows reading of configuration
@@ -99,10 +98,7 @@ func newConfig(deps dependencies) (Component, error) {
 
 	configRefreshIntervalSec := config.GetInt("agent_ipc.config_refresh_interval")
 	agentIPCPort := config.GetInt("agent_ipc.port")
-	if flavor.GetFlavor() != flavor.DefaultAgent &&
-		agentIPCPort > 0 &&
-		configRefreshIntervalSec > 0 {
-
+	if isConfigSyncFlavorEnabled() && agentIPCPort > 0 && configRefreshIntervalSec > 0 {
 		ctx, cancel := context.WithCancel(context.Background())
 		deps.Lc.Append(fx.Hook{
 			OnStart: func(context.Context) error {

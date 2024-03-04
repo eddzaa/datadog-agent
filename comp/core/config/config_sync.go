@@ -11,13 +11,24 @@ import (
 	"net"
 	"net/url"
 	"reflect"
+	"slices"
 	"strconv"
 	"time"
 
 	apiutils "github.com/DataDog/datadog-agent/pkg/api/util"
 	pkgconfigmodel "github.com/DataDog/datadog-agent/pkg/config/model"
+	"github.com/DataDog/datadog-agent/pkg/util/flavor"
 	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
+
+func isConfigSyncFlavorEnabled() bool {
+	flavorAllowList := []string{
+		flavor.SecurityAgent,
+		flavor.ProcessAgent,
+		flavor.TraceAgent,
+	}
+	return slices.Contains(flavorAllowList, flavor.GetFlavor())
+}
 
 func syncConfigWithCoreAgent(ctx context.Context, config pkgconfigmodel.ReaderWriter, host string, port int, refreshInterval time.Duration) {
 	url := &url.URL{
