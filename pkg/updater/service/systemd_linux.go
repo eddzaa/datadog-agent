@@ -30,6 +30,8 @@ const (
 	systemdReload = "systemd-reload"
 	path          = "/opt/datadog/updater/run/"
 	adminExecutor = "datadog-updater-admin.service"
+	inFifo        = path + "in.fifo"
+	outFifo       = path + "out.fifo"
 )
 
 type scriptRunner struct {
@@ -38,14 +40,14 @@ type scriptRunner struct {
 }
 
 func newScriptRunner() (*scriptRunner, error) {
-	_ = os.Remove(path + "in.fifo")
-	_ = os.Remove(path + "out.fifo")
+	_ = os.Remove(inFifo)
+	_ = os.Remove(outFifo)
 	// start with outFifo creation first as inFifo can trigger the path
-	outFifo, err := fifo.OpenFifo(context.Background(), path+"out.fifo", syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0660)
+	outFifo, err := fifo.OpenFifo(context.Background(), outFifo, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0660)
 	if err != nil {
 		return nil, fmt.Errorf("error opening out.fifo: %s", err)
 	}
-	inFifo, err := fifo.OpenFifo(context.Background(), path+"in.fifo", syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NONBLOCK, 0660)
+	inFifo, err := fifo.OpenFifo(context.Background(), inFifo, syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NONBLOCK, 0660)
 	if err != nil {
 		outFifo.Close()
 		return nil, fmt.Errorf("error opening in.fifo: %s", err)
@@ -110,7 +112,7 @@ func (s *scriptRunner) executeCommand(command string) error {
 
 func (s *scriptRunner) Close() {
 	s.inFifo.Close()
-	_ = os.Remove(path + "in.fifo")
+	_ = os.Remove(inFifo)
 	s.outFifo.Close()
 }
 
