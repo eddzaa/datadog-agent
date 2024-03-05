@@ -54,6 +54,7 @@ type VersionContext struct {
 // SecurityProfile defines a security profile
 type SecurityProfile struct {
 	sync.Mutex
+	timeResolver        *timeResolver.Resolver
 	loadedInKernel      bool
 	loadedNano          uint64
 	selector            cgroupModel.WorkloadSelector
@@ -79,10 +80,15 @@ func NewSecurityProfile(selector cgroupModel.WorkloadSelector, eventTypes []mode
 	// profiles that allow for evaluating new event types, and profiles that don't. As such, the event types allowed to
 	// generate anomaly detections in the input of this function will need to be merged with the event types defined in
 	// the configuration.
+	tr, err := timeResolver.NewResolver()
+	if err != nil {
+		return nil
+	}
 	sp := &SecurityProfile{
 		selector:        selector,
 		eventTypes:      eventTypes,
 		versionContexts: make(map[string]*VersionContext),
+		timeResolver:    tr,
 	}
 	if selector.Tag != "" && selector.Tag != "*" {
 		sp.versionContexts[selector.Tag] = &VersionContext{
@@ -168,7 +174,7 @@ func (p *SecurityProfile) SendStats(client statsd.ClientInterface) error {
 }
 
 // ToSecurityProfileMessage returns a SecurityProfileMessage filled with the content of the current Security Profile
-func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Resolver) *api.SecurityProfileMessage {
+func (p *SecurityProfile) ToSecurityProfileMessage() *api.SecurityProfileMessage {
 	// construct the list of image tags for this profile
 	imageTags := ""
 	for key := range p.versionContexts {
@@ -180,7 +186,7 @@ func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Re
 
 	msg := &api.SecurityProfileMessage{
 		LoadedInKernel:          p.loadedInKernel,
-		LoadedInKernelTimestamp: timeResolver.ResolveMonotonicTimestamp(p.loadedNano).String(),
+		LoadedInKernelTimestamp: p.timeResolver.ResolveMonotonicTimestamp(p.loadedNano).String(),
 		Selector: &api.WorkloadSelectorMessage{
 			Name: p.selector.Image,
 			Tag:  imageTags,
@@ -216,8 +222,6 @@ func (p *SecurityProfile) ToSecurityProfileMessage(timeResolver *timeResolver.Re
 
 // GetState returns the state of a profile for a given imageTag
 func (p *SecurityProfile) GetState(imageTag string) EventFilteringProfileState {
-	p.versionContextsLock.Lock()
-	defer p.versionContextsLock.Unlock()
 	pCtx, ok := p.versionContexts[imageTag]
 	if !ok {
 		return NoProfile
@@ -242,6 +246,8 @@ func (p *SecurityProfile) GetState(imageTag string) EventFilteringProfileState {
 
 // GetGlobalState returns the global state of a profile: AutoLearning, StableEventType or UnstableEventType
 func (p *SecurityProfile) GetGlobalState() EventFilteringProfileState {
+	p.versionContextsLock.Lock()
+	defer p.versionContextsLock.Unlock()
 	globalState := AutoLearning
 	for imageTag := range p.versionContexts {
 		state := p.GetState(imageTag)
@@ -305,10 +311,11 @@ func (p *SecurityProfile) makeRoomForNewVersion(maxImageTags int) {
 
 func (p *SecurityProfile) prepareNewVersion(newImageTag string, tags []string, maxImageTags int) {
 	// prepare new profile context to be inserted
+	now := uint64(p.timeResolver.ComputeMonotonicTimestamp(time.Now()))
 	newProfileCtx := &VersionContext{
 		eventTypeState: make(map[model.EventType]*EventTypeState),
-		firstSeenNano:  uint64(time.Now().UnixNano()),
-		lastSeenNano:   uint64(time.Now().UnixNano()),
+		firstSeenNano:  now,
+		lastSeenNano:   now,
 		Tags:           tags,
 	}
 
@@ -325,8 +332,9 @@ func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageT
 		return
 	}
 	// prepare new profile context to be inserted
-	newVersion.versionContexts[newImageTag].firstSeenNano = uint64(time.Now().UnixNano())
-	newVersion.versionContexts[newImageTag].lastSeenNano = uint64(time.Now().UnixNano())
+	now := uint64(p.timeResolver.ComputeMonotonicTimestamp(time.Now()))
+	newVersion.versionContexts[newImageTag].firstSeenNano = now
+	newVersion.versionContexts[newImageTag].lastSeenNano = now
 	newProfileCtx, ok := newVersion.versionContexts[newImageTag]
 	if !ok { // should not happen neither
 		return
@@ -334,9 +342,9 @@ func (p *SecurityProfile) mergeNewVersion(newVersion *SecurityProfile, maxImageT
 
 	// add the new profile context to the list
 	p.versionContextsLock.Lock()
-	defer p.versionContextsLock.Unlock()
 	p.makeRoomForNewVersion(maxImageTags)
 	p.versionContexts[newImageTag] = newProfileCtx
+	p.versionContextsLock.Unlock()
 
 	// finally, merge the trees
 	p.ActivityTree.Merge(newVersion.ActivityTree)
@@ -362,9 +370,9 @@ func (p *SecurityProfile) getTimeOrderedVersionContexts() []*VersionContext {
 // GetVersionContextIndex returns the context of the givent version if any
 func (p *SecurityProfile) GetVersionContextIndex(index int) *VersionContext {
 	p.versionContextsLock.Lock()
-	defer p.versionContextsLock.Unlock()
-
 	orderedVersions := p.getTimeOrderedVersionContexts()
+	p.versionContextsLock.Unlock()
+
 	if index >= len(orderedVersions) {
 		return nil
 	}
@@ -409,12 +417,13 @@ func (p *SecurityProfile) SetVersionState(imageTag string, state EventFilteringP
 	if !found {
 		return errors.New("profile version not found")
 	}
+	now := uint64(p.timeResolver.ComputeMonotonicTimestamp(time.Now()))
 	for _, et := range p.eventTypes {
 		if eventState, ok := ctx.eventTypeState[et]; ok {
 			eventState.state = state
 		} else {
 			ctx.eventTypeState[et] = &EventTypeState{
-				lastAnomalyNano: uint64(time.Now().UnixNano()),
+				lastAnomalyNano: now,
 				state:           state,
 			}
 		}

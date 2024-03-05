@@ -11,6 +11,7 @@ package dump
 import (
 	proto "github.com/DataDog/agent-payload/v5/cws/dumpsv1"
 
+	timeResolver "github.com/DataDog/datadog-agent/pkg/security/resolvers/time"
 	activity_tree "github.com/DataDog/datadog-agent/pkg/security/security_profile/activity_tree"
 	mtdt "github.com/DataDog/datadog-agent/pkg/security/security_profile/activity_tree/metadata"
 )
@@ -30,7 +31,11 @@ func ActivityDumpToSecurityProfileProto(input *ActivityDump) *proto.SecurityProf
 		ProfileContexts: make(map[string]*proto.ProfileContext),
 		Tree:            activity_tree.ToProto(input.ActivityTree),
 	}
-	ts := uint64(input.Metadata.Start.UnixNano())
+	timeResolver, err := timeResolver.NewResolver()
+	if err != nil {
+		return nil
+	}
+	ts := uint64(timeResolver.ComputeMonotonicTimestamp(input.Metadata.Start))
 	ctx := &proto.ProfileContext{
 		Syscalls:  input.ActivityTree.ComputeSyscallsList(),
 		Tags:      make([]string, len(input.Tags)),

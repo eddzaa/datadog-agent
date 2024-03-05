@@ -95,7 +95,7 @@ func (sn *SocketNode) InsertBindEvent(evt *model.BindEvent, imageTag string, gen
 				return false
 			}
 			n.ImageTags = append(n.ImageTags, imageTag)
-			return true
+			return false
 		}
 	}
 

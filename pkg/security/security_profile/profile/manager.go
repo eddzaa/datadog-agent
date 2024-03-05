@@ -768,12 +768,13 @@ func (m *SecurityProfileManager) LookupEventInProfiles(event *model.Event) {
 	ctx, found := profile.versionContexts[imageTag]
 	if found {
 		// update the lastseen of this version
-		ctx.lastSeenNano = uint64(time.Now().UnixNano())
+		ctx.lastSeenNano = uint64(m.resolvers.TimeResolver.ComputeMonotonicTimestamp(time.Now()))
 	} else {
 		// create a new version
 		profile.prepareNewVersion(imageTag, event.ContainerContext.Tags, m.config.RuntimeSecurity.SecurityProfileMaxImageTags)
 		ctx, found = profile.versionContexts[imageTag]
 		if !found { // should never happen
+			profile.versionContextsLock.Unlock()
 			return
 		}
 	}
@@ -884,7 +885,7 @@ func (m *SecurityProfileManager) ListSecurityProfiles(params *api.SecurityProfil
 	defer m.profilesLock.Unlock()
 
 	for _, p := range m.profiles {
-		msg := p.ToSecurityProfileMessage(m.resolvers.TimeResolver)
+		msg := p.ToSecurityProfileMessage()
 		out.Profiles = append(out.Profiles, msg)
 	}
 
@@ -896,7 +897,7 @@ func (m *SecurityProfileManager) ListSecurityProfiles(params *api.SecurityProfil
 			if !ok {
 				continue
 			}
-			msg := p.ToSecurityProfileMessage(m.resolvers.TimeResolver)
+			msg := p.ToSecurityProfileMessage()
 			out.Profiles = append(out.Profiles, msg)
 		}
 	}

@@ -287,18 +287,14 @@ func (pn *ProcessNode) InsertDNSEvent(evt *model.Event, imageTag string, generat
 		// update matched rules
 		dnsNode.MatchedRules = model.AppendMatchedRule(dnsNode.MatchedRules, evt.Rules)
 
-		var imageTagInserted bool
 		if !slices.Contains(dnsNode.ImageTags, imageTag) {
-			imageTagInserted = true
 			dnsNode.ImageTags = append(dnsNode.ImageTags, imageTag)
-		} else {
-			imageTagInserted = false
 		}
 
 		// look for the DNS request type
 		for _, req := range dnsNode.Requests {
 			if req.Type == evt.DNS.Type {
-				return imageTagInserted
+				return false
 			}
 		}
 

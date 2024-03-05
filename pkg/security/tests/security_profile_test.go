@@ -75,7 +75,6 @@ func TestSecurityProfile(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -129,7 +128,6 @@ func TestSecurityProfile(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -169,7 +167,6 @@ func TestSecurityProfile(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command("nslookup", []string{"foo.bar"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -258,7 +255,6 @@ func TestAnomalyDetection(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -292,7 +288,6 @@ func TestAnomalyDetection(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -328,7 +323,6 @@ func TestAnomalyDetection(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command("nslookup", []string{"foo.bar"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -366,7 +360,6 @@ func TestAnomalyDetection(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command("nslookup", []string{"foo.bar"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -447,7 +440,6 @@ func TestAnomalyDetectionWarmup(t *testing.T) {
 	}
 	defer mainDockerInstance.stop()
 
-	time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 	cmd := mainDockerInstance.Command("nslookup", []string{"google.fr"}, []string{})
 	cmd.CombinedOutput()
 	time.Sleep(1 * time.Second) // a quick sleep to let events to be added to the dump
@@ -620,7 +612,6 @@ func TestSecurityProfileReinsertionPeriod(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -655,7 +646,6 @@ func TestSecurityProfileReinsertionPeriod(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command("nslookup", []string{"foo.bar"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -686,7 +676,6 @@ func TestSecurityProfileReinsertionPeriod(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -725,7 +714,6 @@ func TestSecurityProfileReinsertionPeriod(t *testing.T) {
 		}
 		defer dockerInstance.stop()
 
-		time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 		cmd := dockerInstance.Command("nslookup", []string{"foo.bar"}, []string{})
 		_, err = cmd.CombinedOutput()
 		if err != nil {
@@ -831,7 +819,6 @@ func TestSecurityProfileAutoSuppression(t *testing.T) {
 	}
 	defer dockerInstance.stop()
 
-	time.Sleep(time.Second * 1) // to ensure we did not get ratelimited
 	cmd := dockerInstance.Command(syscallTester, []string{"sleep", "1"}, []string{})
 	_, err = cmd.CombinedOutput()
 	if err != nil {
@@ -1239,6 +1226,9 @@ func TestSecurityProfileLifeCycleDNS(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	// most of the time DNS events triggers twice, let the second be handled before continuing
+	time.Sleep(time.Second)
 
 	t.Run("life-cycle-v2-learning-v1-dns", func(t *testing.T) {
 		err = test.GetCustomEventSent(t, func() error {

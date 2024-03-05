@@ -151,7 +151,6 @@ func (fn *FileNode) InsertFileEvent(fileEvent *model.FileEvent, event *model.Eve
 			currentPath = currentPath[nextParentIndex:]
 			if imageTag != "" && !slices.Contains(currentFn.ImageTags, imageTag) {
 				currentFn.ImageTags = append(currentFn.ImageTags, imageTag)
-				newEntry = true
 			}
 			continue
 		}
