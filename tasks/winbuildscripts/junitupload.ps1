@@ -12,7 +12,8 @@ if ($Env:TARGET_ARCH -eq "x64") {
 $UT_BUILD_ROOT=(Get-Location).Path
 $Env:PATH="$UT_BUILD_ROOT\dev\lib;$Env:GOPATH\bin;$Env:Python3_ROOT_DIR;$Env:Python3_ROOT_DIR\Scripts;$Env:PATH"
 
-Invoke-WebRequest -Uri "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_win-x64.exe" -OutFile "datadog-ci.exe"
+$url = 'https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_win-x64.exe'
+(New-Object System.Net.WebClient).DownloadFile($url, "datadog-ci.exe")
 $DebugPreference = 'SilentlyContinue'
 & $Env:DATADOG_API_KEY = (aws ssm get-parameter --region us-east-1 --name ci.datadog-agent.datadog_api_key_org2 --with-decryption --query "Parameter.Value" --out text)
 $DebugPreference = 'Continue'
