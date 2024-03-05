@@ -36,7 +36,7 @@ func (fr *FakeResolver) Stop() error {
 	return nil
 }
 
-// func (fr *FakeResolver) resolveDifferentImageNames(containerID string) []string {
+// Resolve returns the tags for the given id
 func (fr *FakeResolver) Resolve(containerID string) []string {
 	fakeTags := []string{
 		"image_tag:latest",
