@@ -16,17 +16,41 @@ if [ ! -f /etc/debian_version ]; then
     systemd_path="/usr/lib/systemd/system"
 fi
 
+assert_command() {
+    command="$1"
+    if [ "${#command}" -gt 100 ]; then
+        error_message="command name longer then 100"
+        return 1
+    fi
+    tmp_str="${command}"
+    while [ -n "$tmp_str" ]; do
+        rest="${tmp_str#?}"
+        first_character="${tmp_str%"$rest"}"
+        tmp_str="$rest"
+        case "$first_character" in
+            [abcdefghijklmnopqrstuvwxyz-])
+                ;;
+            ".")
+                ;;
+            " ")
+                ;;
+            *)
+                error_message="invalid command: $command"
+                echo "failed"
+                return 1
+                ;;
+        esac
+    done
+    echo "success"
+    return 0
+}
+
 assert_unit() {
     unit="$1"
     echo "asserting unit $unit"
     if [ "${unit#"datadog"}" = "$unit" ]; then
         error_message="unit name must start with 'datadog'"
         echo "failed datadog start check"
-        return 1
-    fi
-    if [ "${#unit}" -gt 50 ]; then
-        error_message="unit name longer then 50"
-        echo "greater then"
         return 1
     fi
     tmp_str="${unit}"
@@ -127,13 +151,15 @@ while true; do
         exit 0
     fi
     echo "read $command"
-    # shellcheck disable=SC2086
-    handle_command $command
+
+    # verify command before expanding it in handle_command
+    if ! assert_command "$command"; then
+        # shellcheck disable=SC2086
+        handle_command $command
+    fi
 
     result="success"
-    echo "tadaaa"
     if [ -n "$error_message" ]; then
-       echo "$error_message"
        result="error: $error_message"
     fi
     echo "$result" >&3
