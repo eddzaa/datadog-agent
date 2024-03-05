@@ -44,11 +44,8 @@
 
 .upload_junit_source:
   - source /root/.bashrc && conda activate $CONDA_ENV
-  # Install the ci-visbility standalone CLI and upload junits
-  - curl -L --fail "https://github.com/DataDog/datadog-ci/releases/latest/download/datadog-ci_linux-x64" --output "/usr/local/bin/datadog-ci" && chmod +x /usr/local/bin/datadog-ci
-  - set +x
-  - export DATADOG_API_KEY=$(aws ssm get-parameter --region us-east-1 --name ci.datadog-agent.datadog_api_key_org2 --with-decryption --query "Parameter.Value" --out text)
-  - set -x
+  # Upload generated junit files
+  - export DATADOG_API_KEY=$($CI_PROJECT_DIR/tools/ci/aws_ssm_get_wrapper.sh ci.datadog-agent.datadog_api_key_org2)
   - for f in junit-*.tgz; do inv -e junit-upload --tgz-path $f; done
 
 .linux_tests_with_upload:
