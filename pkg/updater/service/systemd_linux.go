@@ -30,8 +30,8 @@ const (
 	systemdReload = "systemd-reload"
 	path          = "/opt/datadog/updater/run/"
 	adminExecutor = "datadog-updater-admin.service"
-	inFifo        = path + "in.fifo"
-	outFifo       = path + "out.fifo"
+	inFifoPath    = path + "in.fifo"
+	outFifoPath   = path + "out.fifo"
 )
 
 type scriptRunner struct {
@@ -40,14 +40,14 @@ type scriptRunner struct {
 }
 
 func newScriptRunner() (*scriptRunner, error) {
-	_ = os.Remove(inFifo)
-	_ = os.Remove(outFifo)
+	_ = os.Remove(inFifoPath)
+	_ = os.Remove(outFifoPath)
 	// start with outFifo creation first as inFifo can trigger the path
-	outFifo, err := fifo.OpenFifo(context.Background(), outFifo, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0660)
+	outFifo, err := fifo.OpenFifo(context.Background(), outFifoPath, syscall.O_CREAT|syscall.O_RDONLY|syscall.O_NONBLOCK, 0660)
 	if err != nil {
 		return nil, fmt.Errorf("error opening out.fifo: %s", err)
 	}
-	inFifo, err := fifo.OpenFifo(context.Background(), inFifo, syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NONBLOCK, 0660)
+	inFifo, err := fifo.OpenFifo(context.Background(), inFifoPath, syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NONBLOCK, 0660)
 	if err != nil {
 		outFifo.Close()
 		return nil, fmt.Errorf("error opening in.fifo: %s", err)
@@ -88,7 +88,7 @@ func (s *scriptRunner) systemdReload() error {
 
 func (s *scriptRunner) executeCommand(command string) error {
 	err := wrapWithTimeout(func() error {
-		_, err := s.inFifo.Write([]byte(command))
+		_, err := s.inFifo.Write([]byte(command + "\n"))
 		return err
 	})
 	if err != nil {
@@ -112,8 +112,9 @@ func (s *scriptRunner) executeCommand(command string) error {
 
 func (s *scriptRunner) Close() {
 	s.inFifo.Close()
-	_ = os.Remove(inFifo)
+	_ = os.Remove(inFifoPath)
 	s.outFifo.Close()
+	_ = os.Remove(outFifoPath)
 }
 
 func wrapUnitCommand(command unitCommand, unit string) string {
@@ -126,7 +127,7 @@ func wrapWithTimeout(fn func() error) error {
 		err <- fn()
 	}()
 	select {
-	case <-time.After(3 * time.Second):
+	case <-time.After(10 * time.Second):
 		return fmt.Errorf("timeout")
 	case e := <-err:
 		return e

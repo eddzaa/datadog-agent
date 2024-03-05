@@ -80,8 +80,8 @@ handle_command() {
             fi
             return 0
             ;;
-        "reload")
-            if ! "systemctl daemon-reload"; then
+        "systemd-reload")
+            if ! systemctl daemon-reload; then
                 error_message="failed to reload: $unit"
                 return 1
             fi
@@ -117,10 +117,13 @@ handle_command() {
     esac
 }
 
+exec 3> "$out_fifo"
+exec 4< "$in_fifo"
 while true; do
     echo "waiting"
-    if ! read -r command < "$in_fifo"; then
-        rm "$out_fifo" || true
+    if ! read -r command <&4; then
+        exec 3>&-
+        exec 4<&-
         exit 0
     fi
     echo "read $command"
@@ -128,9 +131,11 @@ while true; do
     handle_command $command
 
     result="success"
+    echo "tadaaa"
     if [ -n "$error_message" ]; then
+       echo "$error_message"
        result="error: $error_message"
     fi
-    echo "$result" > "$out_fifo"
+    echo "$result" >&3
     error_message=""
 done
